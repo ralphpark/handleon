@@ -1,0 +1,12 @@
+.cache/
+.gradle/
+build/
+local.properties
+keystore.properties
+*.jks
+.idea/
+.DS_Store
+.kotlin/
+phone/.dart_tool/
+phone/build/
+server/.env.test
