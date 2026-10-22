@@ -10,3 +10,4 @@ keystore.properties
 phone/.dart_tool/
 phone/build/
 server/.env.test
+.bkit/
