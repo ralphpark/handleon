@@ -100,6 +100,7 @@ object Features {
     private fun matchAnnouncedTurns(
         turns: List<Turn>, events: List<NaviEvent>, samples: List<Sample>,
     ): Pair<Int, Int> {
+        if (samples.none { it.signal != null }) return 0 to 0
         val ahead = events.filterIsInstance<TurnAhead>()
             .filter { it.distanceM in 0.0..300.0 && (it.direction == Signal.LEFT || it.direction == Signal.RIGHT) }
             .toMutableList()
@@ -164,6 +165,7 @@ object Features {
     }
 
     private fun hardBrakes(samples: List<Sample>): Int {
+        val brakeAvailable = samples.any { it.brake != null }
         var lastEvent: Long? = null
         var count = 0
         for ((a, b) in samples.zipWithNext()) {
@@ -172,7 +174,7 @@ object Features {
             val dt = b.tMs - a.tMs
             if (dt !in 1..2_000) continue
             val perSecond = (previous - current) * 1_000 / dt
-            if (previous >= 19 && perSecond >= 12.9 && b.brake == true &&
+            if (previous >= 19 && perSecond >= 12.9 && (!brakeAvailable || b.brake == true) &&
                 (lastEvent == null || b.tMs - lastEvent > 3_000)) {
                 count++
                 lastEvent = b.tMs
@@ -192,9 +194,11 @@ object Features {
             val heading = window.mapNotNull { it.headingDeg?.takeIf(Double::isFinite) }
             val steering = window.mapNotNull { it.steeringDeg?.takeIf(Double::isFinite) }
             val contiguous = window.zipWithNext().all { (a, b) -> b.tMs - a.tMs == 1_000L }
-            val valid = contiguous && speed.size == 10 && heading.size == 10 && steering.size == 10 &&
-                speed.min() >= 40 && speed.max() - speed.min() <= 5 &&
+            val straight = if (heading.size == 10)
                 heading.zipWithNext().sumOf { (a, b) -> abs(Geo.headingDelta(a, b)) } <= 10
+                else steering.size == 10 && steering.all { abs(it) <= 15 }
+            val valid = contiguous && speed.size == 10 && steering.size == 10 &&
+                speed.min() >= 40 && speed.max() - speed.min() <= 5 && straight
             if (!valid) {
                 index++
                 continue

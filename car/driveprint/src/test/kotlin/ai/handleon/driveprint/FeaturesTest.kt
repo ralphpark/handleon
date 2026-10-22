@@ -89,7 +89,10 @@ class FeaturesTest {
         assertNull(ex(trip(cruise(50.0, 120).map { it.copy(steeringDeg = null) })).steeringStd)
         assertNull(ex(trip(cruise(50.0, 59))).steeringStd)
         assertNull(ex(trip(cruise(50.0, 59))).speedingRatio)
-        assertNull(ex(trip(cruise(50.0, 120, heading = null))).steeringReversalsPerMin)
+        val withoutHeading = ex(trip(cruise(50.0, 120, heading = null)))
+        assertEquals(0.0, withoutHeading.steeringStd!!, 1e-9)
+        assertEquals(0.0, withoutHeading.steeringReversalsPerMin!!, 1e-9)
+        assertNull(ex(trip(cruise(50.0, 59, heading = null))).steeringStd)
     }
     @Test fun wobbleHasExpectedMagnitudeAndReversals() {
         val f = ex(trip(wobble(3.0)))
@@ -149,5 +152,36 @@ class FeaturesTest {
             "2026-03-02", "2026-05-25", "2026-06-03", "2027-02-09", "2027-05-13", "2027-12-27")
             .forEach { assertTrue(KoreanHolidays.isOffDay(LocalDate.parse(it)), it) }
         assertFalse(KoreanHolidays.isOffDay(LocalDate.of(2026, 5, 12)))
+    }
+    @Test fun unavailableSignalSkipsAnnouncedTurnJudgment() {
+        val samples = (cruise(30.0, 30) + leftTurn(8)).map { it.copy(signal = null) }
+        val f = ex(trip(samples, listOf(TurnAhead(t(10), Signal.LEFT, 100.0))))
+        assertEquals(1, f.leftTurns)
+        assertEquals(0, f.announcedTurns)
+        assertEquals(0, f.signalMisses)
+    }
+    @Test fun unavailableBrakeUsesDecelerationAndThreeSecondDebounce() {
+        val samples = listOf(50.0, 35.0, 50.0, 35.0, 50.0, 35.0).map { s(it, brake = null) }
+        assertEquals(2, ex(trip(samples)).hardBrakes)
+    }
+    @Test fun anyObservedBrakeValueKeepsBrakeOnRequirement() {
+        val samples = listOf(s(50.0, false), s(35.0, null), s(50.0, null), s(35.0, false))
+        assertEquals(0, ex(trip(samples)).hardBrakes)
+    }
+    @Test fun unavailableHeadingUsesSmallAbsoluteSteering() {
+        val f = ex(trip(wobble(3.0).map { it.copy(headingDeg = null) }))
+        assertEquals(3.0, f.steeringStd!!, 1e-9)
+        assertEquals(48.0, f.steeringReversalsPerMin!!, 1e-9)
+    }
+    @Test fun partiallyMissingHeadingUsesFallbackForThatWindow() {
+        val samples = wobble(3.0).mapIndexed { i, sample ->
+            sample.copy(headingDeg = if (i % 10 == 0) null else i * 30.0 % 360)
+        }
+        assertEquals(3.0, ex(trip(samples)).steeringStd!!, 1e-9)
+    }
+    @Test fun headingFallbackRejectsLargeSteeringButFullHeadingKeepsOriginalRule() {
+        assertNull(ex(trip(wobble(15.1).map { it.copy(headingDeg = null) })).steeringStd)
+        assertEquals(15.0, ex(trip(wobble(15.0).map { it.copy(headingDeg = null) })).steeringStd!!, 1e-9)
+        assertEquals(20.0, ex(trip(wobble(20.0))).steeringStd!!, 1e-9)
     }
 }
