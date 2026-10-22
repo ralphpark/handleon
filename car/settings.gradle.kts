@@ -16,4 +16,4 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "handleon-car"
-include(":driveprint", ":sim")
+include(":driveprint", ":sim", ":app")

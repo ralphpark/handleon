@@ -3,5 +3,6 @@
 # 기본은 --offline. 의존성을 새로 받을 때만 GW_ONLINE=1 ./gw ...
 cd "$(dirname "$0")" || exit 1
 export GRADLE_USER_HOME="$PWD/../.cache/gradle" ANDROID_USER_HOME="$PWD/../.cache/android"
+export ANDROID_HOME="${ANDROID_HOME:-$HOME/Library/Android/sdk}"
 export JAVA_HOME="${JAVA_HOME_OVERRIDE:-$HOME/.local/jdk21/Contents/Home}"
 if [ -n "${GW_ONLINE:-}" ]; then exec ./gradlew "$@"; else exec ./gradlew --offline "$@"; fi
