@@ -4,7 +4,8 @@ import ai.handleon.car.store.TripStore
 import ai.handleon.driveprint.ConditionReport
 import ai.handleon.driveprint.Driveprint
 import ai.handleon.driveprint.LongReport
-import java.time.YearMonth
+import ai.handleon.driveprint.Reset
+import ai.handleon.driveprint.ResetKind
 import java.time.ZoneId
 import java.time.ZonedDateTime
 import kotlinx.coroutines.Dispatchers
@@ -35,14 +36,15 @@ class EngineRunner(
         val now = clock().withZoneSameInstant(ZoneId.of("Asia/Seoul"))
         val trips = repo.trips()
         val labeledDays = repo.labels().keys
-        val resetDays = repo.resets().filter { it.second == "HOME_CHANGED" || it.second == "CAR_CHANGED" }
-            .map { it.first }.toSet()
+        val resets = repo.resets().mapNotNull { (day, kind) ->
+            ResetKind.entries.firstOrNull { it.name == kind }?.let { Reset(day, it) }
+        }.toSet()
         val next = withContext(Dispatchers.Default) {
             when (mode) {
                 Mode.MAEUM -> EngineState(engine.longReport(trips, labeledDays,
-                    resetDays.map(YearMonth::from).toSet(), YearMonth.from(now)), null, now.toInstant().toEpochMilli())
+                    resets, now.toLocalDate()), null, now.toInstant().toEpochMilli())
                 Mode.CONDITION -> EngineState(null, engine.conditionReport(trips, labeledDays,
-                    resetDays, now.toLocalDate()), now.toInstant().toEpochMilli())
+                    resets, now.toLocalDate()), now.toInstant().toEpochMilli())
             }
         }
         next.long?.let { repo.saveReport("LONG", Json.encodeToString(it)) }

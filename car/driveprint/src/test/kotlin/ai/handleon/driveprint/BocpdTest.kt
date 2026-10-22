@@ -4,6 +4,11 @@ import java.util.Random
 import kotlin.test.*
 
 class BocpdTest {
+    @Test fun improvementIsNotOnset() {
+        val random = Random(3)
+        val series = List(40) { 2.0 + random.nextGaussian() * .3 } + List(12) { random.nextGaussian() * .3 }
+        assertNull(Bocpd.lastChangeIndex(series, priorMean = 2.0))
+    }
     @Test fun detectsStepChange() {
         val rnd = Random(3); val s = List(40) { rnd.nextGaussian() * 0.3 } + List(12) { 2.0 + rnd.nextGaussian() * 0.3 }
         assertTrue(Bocpd.lastChangeIndex(s)!! in 38..42)

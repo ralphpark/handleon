@@ -4,11 +4,10 @@ import kotlin.math.*
 
 /** Normal-gamma / Student-t BOCPD, evaluated in log space to avoid posterior underflow. */
 object Bocpd {
-    fun lastChangeIndex(series: List<Double>, hazard: Double = 1.0 / 52): Int? {
-        require(hazard > 0 && hazard < 1 && series.all(Double::isFinite))
+    fun lastChangeIndex(series: List<Double>, hazard: Double = 1.0 / 52, priorMean: Double = 0.0): Int? {
+        require(hazard > 0 && hazard < 1 && priorMean.isFinite() && series.all(Double::isFinite))
         if (series.size < 3) return null
-        // The API supplies no separate baseline: the first six weekly observations initialize mu0.
-        val prior = Posterior(series.take(6).average(), 1.0, 1.0, 1.0)
+        val prior = Posterior(priorMean, 1.0, 1.0, 1.0)
         var states = listOf(prior)
         var probabilities = doubleArrayOf(0.0)
         for (x in series) {
@@ -21,7 +20,9 @@ object Bocpd {
             states = listOf(prior) + states.map { it.observe(x) }
         }
         val run = probabilities.indices.maxBy { probabilities[it] }
-        return if (run < series.size - 1) series.size - 1 - run else null
+        val change = if (run < series.size - 1) series.size - 1 - run else return null
+        val after = series.drop(change + 1)
+        return change.takeIf { after.isNotEmpty() && after.average() > series.take(change + 1).average() }
     }
 
     private data class Posterior(val mu: Double, val kappa: Double, val alpha: Double, val beta: Double) {

@@ -24,7 +24,7 @@ class ReplayController(trips: List<TripFeatures>, private val engine: Driveprint
         while (month <= last) {
             delay(2_500)
             val selected = dated.takeWhile { it.second < month.plusMonths(1).atDay(1) }.map { it.first }
-            emit(engine.longReport(selected, emptySet(), emptySet(), month))
+            emit(engine.longReport(selected, emptySet(), emptySet(), month.plusMonths(1).atDay(1)))
             month = month.plusMonths(1)
         }
     }

@@ -4,6 +4,41 @@ import ai.handleon.driveprint.Gear.*
 import kotlin.test.*
 
 class TripSegmenterTest {
+    @Test fun snapshotRestoreContinuesTrip() {
+        val all = drive(0, 120, 36.0, D)
+        val events = listOf<NaviEvent>(GuidanceStarted(10_000, LatLon(37.5, 127.0), "집"),
+            TurnAhead(20_000, Signal.LEFT, 100.0), TurnPassed(30_000, Signal.LEFT),
+            Reroute(40_000), GuidanceEnded(90_000))
+        events.forEach(seg::pushNavi)
+        seg.pushTelltale(TelltaleOn(50_000, "LKA"))
+        feed(all.take(60))
+        val restored = TripSegmenter()
+        restored.restore(seg.snapshot())
+        assertTrue(all.drop(60).mapNotNull(restored::push).isEmpty())
+        val trip = restored.flush()!!
+        assertEquals(all, trip.samples)
+        assertEquals(events, trip.navi)
+        assertEquals(listOf(TelltaleOn(50_000, "LKA")), trip.telltales)
+        assertNull(restored.flush())
+    }
+    @Test fun restoreAfterLongGapClosesPreviousTrip() {
+        seg.pushNavi(Reroute(510_000))
+        feed(drive(0, 120, 36.0, D))
+        val restored = TripSegmenter()
+        restored.restore(seg.snapshot())
+        val closed = restored.push(drive(500_000, 1, 36.0, D).single())!!
+        assertEquals(119_000L, closed.samples.last().tMs)
+        drive(501_000, 120, 36.0, D).forEach(restored::push)
+        assertEquals(listOf(Reroute(510_000)), restored.flush()!!.navi)
+    }
+    @Test fun snapshotRestoresContinuousParkingTimer() {
+        feed(drive(0, 120, 36.0, D) + drive(120_000, 20, 0.0, P))
+        val restored = TripSegmenter()
+        restored.restore(seg.snapshot())
+        val closed = drive(140_000, 11, 0.0, P).mapNotNull(restored::push)
+        assertEquals(1, closed.size)
+        assertEquals(150_000L, closed.single().samples.last().tMs)
+    }
     private val seg = TripSegmenter()
     private fun drive(startMs: Long, seconds: Int, speedKmh: Double, gear: Gear) =
         List(seconds) { i -> Sample(startMs + i * 1000L, speedKmh, gear, false, null, null, null, null, null, null) }

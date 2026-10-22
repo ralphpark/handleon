@@ -13,10 +13,10 @@ import kotlin.test.*
 
 class PersonasTest {
     @Test fun fatherReachesTalkInSummer2026() {
-        val r = Driveprint().longReport(Personas.father(), emptySet(), emptySet(), YearMonth.of(2026, 10))
+        val r = Driveprint().longReport(Personas.father(), emptySet(), emptySet(), YearMonth.of(2026, 10).plusMonths(1).atDay(1))
         assertEquals(Stage.TALK, r.stage)
         val firstTalk = (1..24).map { YearMonth.of(2024, 11).plusMonths(it.toLong() - 1) }
-            .first { Driveprint().longReport(Personas.father(), emptySet(), emptySet(), it).stage == Stage.TALK }
+            .first { Driveprint().longReport(Personas.father(), emptySet(), emptySet(), it.plusMonths(1).atDay(1)).stage == Stage.TALK }
         assertTrue(firstTalk in YearMonth.of(2026, 6)..YearMonth.of(2026, 9))
     }
     @Test fun childEndsWithCaution() = assertEquals(ConditionStatus.CAUTION,

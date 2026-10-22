@@ -9,12 +9,15 @@ import kotlin.math.log2
 object Periods {
     fun values(
         trips: List<TripFeatures>, from: LocalDate, toExclusive: LocalDate, zone: ZoneId,
+        excludedDays: Set<LocalDate> = emptySet(), active: Boolean = false,
     ): Map<FeatureId, Double> {
-        val days = ChronoUnit.DAYS.between(from, toExclusive)
-        require(days > 0) { "Period must have a positive number of days" }
+        val calendarDays = ChronoUnit.DAYS.between(from, toExclusive)
+        require(calendarDays > 0) { "Period must have a positive number of days" }
+        val days = calendarDays - excludedDays.count { it >= from && it < toExclusive }
+        if (days == 0L) return emptyMap()
         val dated = trips.map { it to Instant.ofEpochMilli(it.startMs).atZone(zone).toLocalDate() }
-            .filter { (_, date) -> date >= from && date < toExclusive }
-        if (dated.isEmpty()) return emptyMap()
+            .filter { (_, date) -> date >= from && date < toExclusive && date !in excludedDays }
+        if (dated.isEmpty()) return if (active) mapOf(FeatureId.M1 to 0.0, FeatureId.M2 to 0.0, FeatureId.M3 to 0.0) else emptyMap()
         val selected = dated.map { it.first }
         val result = mutableMapOf<FeatureId, Double>()
         val monthlyScale = 30.0 / days
@@ -32,7 +35,7 @@ object Periods {
                 p * log2(p)
             }
         }
-        selected.mapNotNull { it.maxFromHomeKm }.maxOrNull()?.let { result[FeatureId.M7] = it }
+        selected.mapNotNull { it.maxFromHomeKm }.takeIf { it.isNotEmpty() }?.let { result[FeatureId.M7] = Stats.percentile(it, 0.9) }
 
         val vehicle = selected.filter { it.source == Source.CAR || it.source == Source.SIM }
         val left = vehicle.sumOf { it.leftTurns.toLong() }
@@ -47,7 +50,7 @@ object Periods {
         medianOrNull(dry.mapNotNull { it.speedingRatio })?.let { result[FeatureId.O1] = it }
         medianOrNull(dry.mapNotNull { it.steeringStd })?.let { result[FeatureId.O7] = it }
         val distance = dry.sumOf { it.distanceKm }
-        if (distance >= 20) {
+        if (distance >= if (calendarDays == 1L) 10 else 20) {
             result[FeatureId.O2] = dry.sumOf { it.hardBrakes.toLong() } * 100.0 / distance
             result[FeatureId.O9] = dry.sumOf { it.lkaEvents.toLong() } * 100.0 / distance
         }

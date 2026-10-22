@@ -15,11 +15,12 @@ object Stats {
         return if (sorted.size % 2 == 1) sorted[middle] else sorted[middle - 1] / 2 + sorted[middle] / 2
     }
 
-    fun baseline(xs: List<Double>): Baseline? {
+    fun baseline(xs: List<Double>, minMad: Double = 0.01): Baseline? {
+        require(minMad.isFinite() && minMad > 0)
         if (xs.size < 3) return null
         val center = median(xs)
         val mad = median(xs.map { abs(it - center) })
-        return Baseline(center, maxOf(mad, 0.1 * abs(center), 0.01))
+        return Baseline(center, maxOf(mad, 0.1 * abs(center), minMad))
     }
 
     /** Linear interpolation between ranks 0 and n-1, with p expressed as a fraction. */
@@ -38,6 +39,6 @@ object Stats {
         require(x.isFinite() && b.median.isFinite() && b.mad.isFinite() && b.mad > 0) {
             "Modified z needs finite values and a positive MAD; construct baselines with Stats.baseline"
         }
-        return 0.6745 * (x - b.median) / b.mad
+        return (0.6745 * (x - b.median) / b.mad).coerceIn(-5.0, 5.0)
     }
 }

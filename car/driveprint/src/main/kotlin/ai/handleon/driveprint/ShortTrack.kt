@@ -15,6 +15,7 @@ data class DayInput(val day: LocalDate, val values: Map<FeatureId, Double>, val 
 data class DayResult(
     @Serializable(with = LocalDateSerializer::class) val day: LocalDate,
     val index: Double?, val ewma: Double?, val threshold: Double?, val alert: Boolean,
+    val over: Boolean = false,
 )
 @Serializable
 data class ConditionReport(val status: ConditionStatus, val days: List<DayResult>, val top: List<Contribution>)
@@ -26,8 +27,9 @@ object LocalDateSerializer : KSerializer<LocalDate> {
 }
 
 object ShortTrack {
-    fun evaluate(days: List<DayInput>, resetDays: Set<LocalDate> = emptySet()): ConditionReport {
-        val driving = days.filter { it.trips > 0 }.sortedBy { it.day }
+    fun evaluate(days: List<DayInput>, resets: Set<Reset> = emptySet(),
+                 today: LocalDate = days.maxOfOrNull { it.day } ?: LocalDate.MIN): ConditionReport {
+        val driving = days.filter { it.trips > 0 && it.day <= today }.sortedBy { it.day }
         require(driving.map { it.day }.distinct().size == driving.size) { "One input per driving day is required" }
         val history = mutableListOf<Pair<DayInput, DayResult>>()
         var previousDay: LocalDate? = null
@@ -39,28 +41,28 @@ object ShortTrack {
         for (input in driving) {
             val previous = previousDay
             if (previous != null && (ChronoUnit.DAYS.between(previous, input.day) >= 14 ||
-                    resetDays.any { it > previous && it <= input.day })) {
+                    resets.any { it.kind != ResetKind.HOME_CHANGED && it.day > previous && it.day <= input.day })) {
                 activeFrom = input.day
                 ewma = null
                 previousOver = false
             }
             val eligible = history.filter { (day, result) ->
                 day.day >= activeFrom && day.day >= input.day.minusDays(28) &&
-                    day.day < input.day && !day.labeled && !result.alert
+                    day.day < input.day && !day.labeled && !result.alert && !result.over
             }
             val baselines = CONDITION_FEATURES.mapNotNull { f ->
-                Stats.baseline(eligible.mapNotNull { it.first.values[f] })?.let { f to it }
+                Stats.baseline(eligible.mapNotNull { it.first.values[f] }, f.minMad)?.let { f to it }
             }.toMap()
             val ready = eligible.size >= 7 && baselines.isNotEmpty()
             val raw = if (!ready) emptyMap() else input.values.mapNotNull { (f, value) ->
                 baselines[f]?.let { f to Stats.z(value, it) }
             }.toMap()
             val index = Scoring.domainIndex(raw.mapValues { (f, z) -> Scoring.change(f, z) }, Domain.OPERATION)
-            val threshold = if (ready) Scoring.threshold(eligible.mapNotNull { it.second.ewma }) else null
+            val threshold = if (ready) Scoring.threshold(eligible.mapNotNull { it.second.index }) else null
             if (index != null) ewma = ewma?.let { 0.25 * index + 0.75 * it } ?: index
-            val over = index != null && threshold != null && ewma!! > threshold && !input.labeled
+            val over = index != null && threshold != null && index > threshold && !input.labeled
             val alert = over && previousOver
-            val result = DayResult(input.day, index, if (index == null) null else ewma, threshold, alert)
+            val result = DayResult(input.day, index, if (index == null) null else ewma, threshold, alert, over)
             status = when {
                 !ready -> ConditionStatus.BUILDING
                 index == null -> ConditionStatus.HOLD
@@ -71,6 +73,10 @@ object ShortTrack {
             history.add(input to result)
             previousOver = over
             previousDay = input.day
+        }
+        if (resets.any { it.kind != ResetKind.HOME_CHANGED && it.day > driving.last().day && it.day <= today }) {
+            status = ConditionStatus.BUILDING
+            top = emptyList()
         }
         return ConditionReport(status, history.map { it.second }, top)
     }

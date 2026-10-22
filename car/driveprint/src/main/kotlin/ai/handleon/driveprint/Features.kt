@@ -113,7 +113,7 @@ object Features {
             if (!matched) continue
             announced++
             val signalled = samples.any {
-                it.tMs >= turn.startMs - 15_000 && it.tMs < turn.startMs &&
+                it.tMs >= turn.startMs - 15_000 && it.tMs <= turn.endMs &&
                     (it.signal == turn.direction || it.signal == Signal.HAZARD)
             }
             if (!signalled) missed++
@@ -193,9 +193,9 @@ object Features {
             val speed = window.mapNotNull { it.speedKmh?.takeIf(Double::isFinite) }
             val heading = window.mapNotNull { it.headingDeg?.takeIf(Double::isFinite) }
             val steering = window.mapNotNull { it.steeringDeg?.takeIf(Double::isFinite) }
-            val contiguous = window.zipWithNext().all { (a, b) -> b.tMs - a.tMs == 1_000L }
+            val contiguous = window.zipWithNext().all { (a, b) -> b.tMs - a.tMs in 800L..1_200L }
             val straight = if (heading.size == 10)
-                heading.zipWithNext().sumOf { (a, b) -> abs(Geo.headingDelta(a, b)) } <= 10
+                abs(Geo.headingDelta(heading.first(), heading.last())) <= 10
                 else steering.size == 10 && steering.all { abs(it) <= 15 }
             val valid = contiguous && speed.size == 10 && steering.size == 10 &&
                 speed.min() >= 40 && speed.max() - speed.min() <= 5 && straight

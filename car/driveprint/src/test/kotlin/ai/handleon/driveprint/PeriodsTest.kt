@@ -6,6 +6,26 @@ import java.time.ZoneId
 import kotlin.test.*
 
 class PeriodsTest {
+    @Test fun dailyOperationNeedsTenKmButMonthlyStillNeedsTwenty() {
+        val trip = tripAt().copy(distanceKm = 10.0)
+        assertTrue(FeatureId.O2 in Periods.values(listOf(trip), d("2026-03-02"), d("2026-03-03"), KST))
+        assertFalse(FeatureId.O2 in values(listOf(trip)))
+    }
+    @Test fun m7UsesP90() {
+        val normal = List(20) { tripAt().copy(maxFromHomeKm = 10.0) }
+        assertEquals(10.0, values(normal + tripAt().copy(maxFromHomeKm = 200.0)).getValue(FeatureId.M7), 1e-9)
+    }
+    @Test fun labeledWeekKeepsMobilityLevel() {
+        val from = d("2026-03-01")
+        val to = d("2026-04-01")
+        val daily = (0L until 31).map { tripAt(from.plusDays(it).atTime(12, 0).atZone(KST).toInstant().toEpochMilli()) }
+        val labels = (7L..13L).map { from.plusDays(it) }.toSet()
+        val normal = Periods.values(daily, from, to, KST)
+        val labeled = Periods.values(daily, from, to, KST, excludedDays = labels)
+        for (f in listOf(FeatureId.M1, FeatureId.M2, FeatureId.M3))
+            assertTrue(labeled.getValue(f) in normal.getValue(f) * 0.9..normal.getValue(f) * 1.1)
+        assertTrue(Periods.values(daily, from, to, KST, excludedDays = (0L until 31).map { from.plusDays(it) }.toSet()).isEmpty())
+    }
     private val KST = ZoneId.of("Asia/Seoul")
     private fun d(text: String) = LocalDate.parse(text)
     private fun kst(text: String) = LocalDateTime.parse(text).atZone(KST).toInstant().toEpochMilli()
@@ -104,7 +124,7 @@ class PeriodsTest {
         assertEquals(1.0 / 31, v[FeatureId.M2]!!, 1e-9)
         assertEquals(1.0 / 3, v[FeatureId.M4]!!, 1e-9)
         assertEquals(2.0, v[FeatureId.M5]!!, 1e-9)
-        assertEquals(20.0, v[FeatureId.M7]!!, 1e-9)
+        assertEquals(17.6, v[FeatureId.M7]!!, 1e-9)
     }
     @Test fun emptyPeriodHasNoValuesAndInvalidRangeIsRejected() {
         assertTrue(values(emptyList()).isEmpty())

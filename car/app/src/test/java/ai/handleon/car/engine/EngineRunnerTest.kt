@@ -2,6 +2,8 @@ package ai.handleon.car.engine
 
 import ai.handleon.car.replay.ReplayParser
 import ai.handleon.car.store.TripStore
+import ai.handleon.driveprint.FeatureId
+import ai.handleon.driveprint.Domain
 import ai.handleon.driveprint.ConditionReport
 import ai.handleon.driveprint.ConditionStatus
 import ai.handleon.driveprint.Geo
@@ -51,7 +53,7 @@ class EngineRunnerTest {
             }
         }
         val store = MemoryStore(trips)
-        val runner = runner(store, "2026-08-22T09:00:00+09:00")
+        val runner = runner(store, "2026-09-22T09:00:00+09:00")
         assertEquals(Stage.WATCH, runner.run(Mode.MAEUM).long!!.stage)
         months.forEach { store.setLabel(it.atDay(2), "SLEEP") }
         assertEquals(Stage.STABLE, runner.run(Mode.MAEUM).long!!.stage)
@@ -74,25 +76,37 @@ class EngineRunnerTest {
         assertEquals(false, result.days.last().alert)
     }
 
-    @Test fun homeAndCarChangesResetTheEntireLongTrackMonth() = runTest {
+    @Test fun homeAndCarChangesKeepOtherLongTrackBaselines() = runTest {
+        val baseline = runner(MemoryStore(load("father"))).run(Mode.MAEUM).long!!
         for (kind in listOf("HOME_CHANGED", "CAR_CHANGED")) {
             val store = MemoryStore(load("father"))
-            store.addReset(LocalDate.of(2026, 10, 15), kind)
-            assertEquals(Stage.BUILDING, runner(store).run(Mode.MAEUM).long!!.stage, kind)
+            store.addReset(LocalDate.of(2026, 9, 15), kind)
+            val report = runner(store).run(Mode.MAEUM).long!!
+            assertEquals(baseline.baselines[FeatureId.M1], report.baselines[FeatureId.M1])
+            assertEquals(baseline.baselines[FeatureId.W3], report.baselines[FeatureId.W3])
+            if (kind == "CAR_CHANGED") assertNull(report.baselines[FeatureId.O7])
+            else assertEquals(baseline.baselines[FeatureId.O7], report.baselines[FeatureId.O7])
         }
+        val all = MemoryStore(load("father"))
+        all.addReset(LocalDate.of(2026, 9, 15), "ALL")
+        assertEquals(Stage.BUILDING, runner(all).run(Mode.MAEUM).long!!.stage)
     }
 
-    @Test fun homeAndCarChangesResetConditionOnTheDay() = runTest {
-        for (kind in listOf("HOME_CHANGED", "CAR_CHANGED")) {
+    @Test fun onlyCarAndAllResetConditionOnTheDay() = runTest {
+        val baseline = runner(MemoryStore(load("child"))).run(Mode.CONDITION).condition!!
+        for (kind in listOf("HOME_CHANGED", "CAR_CHANGED", "ALL")) {
             val store = MemoryStore(load("child"))
             store.addReset(LocalDate.of(2026, 10, 22), kind)
-            assertEquals(ConditionStatus.BUILDING, runner(store).run(Mode.CONDITION).condition!!.status, kind)
+            val report = runner(store).run(Mode.CONDITION).condition!!
+            if (kind == "HOME_CHANGED") assertEquals(baseline, report)
+            else assertEquals(ConditionStatus.BUILDING, report.status, kind)
         }
     }
 
     @Test fun clockIsConvertedToSeoulBeforeChoosingMonthAndDay() = runTest {
         val monthly = runner(MemoryStore(load("father")), "2026-10-31T15:30:00Z").run(Mode.MAEUM)
-        assertEquals(YearMonth.of(2026, 11), monthly.long!!.months.last().month)
+        assertEquals(YearMonth.of(2026, 10), monthly.long!!.months.last().month)
+        assertEquals(YearMonth.of(2026, 11), monthly.long!!.inProgress!!.month)
         val daily = runner(MemoryStore(load("child")), "2026-10-21T15:30:00Z").run(Mode.CONDITION)
         assertEquals(LocalDate.of(2026, 10, 22), daily.condition!!.days.last().day)
     }

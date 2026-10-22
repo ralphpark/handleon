@@ -6,10 +6,23 @@ import kotlinx.serialization.json.Json
 import kotlin.test.*
 
 class ScoringTest {
+    @Test fun singleLkaAfterZeroBaselineStaysBelowThreshold() {
+        val b = Stats.baseline(List(6) { 0.0 }, FeatureId.O9.minMad)!!
+        val z = Stats.z(100.0 / 500, b)
+        val index = Scoring.domainIndex(mapOf(FeatureId.O9 to Scoring.change(FeatureId.O9, z)), Domain.OPERATION)!!
+        assertTrue(index < 1.5)
+    }
+    @Test fun bothDirectionIsCentered() {
+        for (f in listOf(FeatureId.O1, FeatureId.O2)) {
+            assertEquals(0.0, Scoring.change(f, .6745), 1e-12)
+            assertEquals(0.0, Scoring.change(f, -.6745), 1e-12)
+            assertEquals(-.6745, Scoring.change(f, 0.0), 1e-12)
+        }
+    }
     @Test fun modifiedZMatchesIglewiczHoaglin() = assertEquals(0.6745 * (14 - 10) / 2.0, Stats.z(14.0, Baseline(10.0, 2.0)), 1e-12)
     @Test fun constantBaselineDoesNotExplode() { val b = Stats.baseline(listOf(0.0, 0.0, 0.0, 0.0))!!; assertEquals(0.01, b.mad, 1e-12); assertTrue(Stats.z(1.0, b).isFinite()) }
     @Test fun downFeatureDecreaseIsPositiveChange() = assertEquals(2.0, Scoring.change(FeatureId.M1, -2.0), 1e-12)
-    @Test fun bothDirectionUsesMagnitude() = assertEquals(2.0, Scoring.change(FeatureId.O2, -2.0), 1e-12)
+    @Test fun bothDirectionUsesCenteredMagnitude() = assertEquals(2.0 - 0.6745, Scoring.change(FeatureId.O2, -2.0), 1e-12)
     @Test fun domainIndexWeightsByGrade() =   // W2(B 0.6) 변화 1.0, W3(C 0.3) 변화 4.0 → (0.6 + 1.2) / 0.9 = 2.0
         assertEquals(2.0, Scoring.domainIndex(mapOf(FeatureId.W2 to 1.0, FeatureId.W3 to 4.0), Domain.WAYFINDING)!!, 1e-12)
     @Test fun missingFeaturesAreSkipped() = assertNull(Scoring.domainIndex(mapOf(FeatureId.M1 to 1.0), Domain.OPERATION))
@@ -57,7 +70,7 @@ class ScoringTest {
             FeatureId.O7 to -4.0, FeatureId.W3 to 5.0))
         assertEquals(listOf(FeatureId.O2, FeatureId.M1, FeatureId.W3), top.map { it.feature })
         assertEquals(-3.0, top[0].z, 1e-12)
-        assertEquals(3.0, top[0].weighted, 1e-12)
+        assertEquals(3.0 - 0.6745, top[0].weighted, 1e-12)
         assertEquals(-2.0, top[1].z, 1e-12)
         assertEquals(2.0, top[1].weighted, 1e-12)
     }

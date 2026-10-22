@@ -3,8 +3,29 @@ package ai.handleon.driveprint
 import java.time.LocalDate
 import java.util.Random
 import kotlin.test.*
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.*
 
 class ShortTrackTest {
+    @Test fun firstOverDayIsReportedAndExcludedFromNextBaseline() {
+        val report = ShortTrack.evaluate(days(30) + badDays(2, 2.0))
+        val first = report.days[30]
+        assertFalse(first.alert)
+        assertTrue(first.index!! > first.threshold!!)
+        val fields = Json.parseToJsonElement(Json.encodeToString(first)).jsonObject
+        assertEquals(true, fields["over"]?.jsonPrimitive?.booleanOrNull)
+        val withoutFirstOver = ShortTrack.evaluate(days(30) + badDays(2, 2.0).last())
+        assertEquals(withoutFirstOver.days.last().index!!, report.days.last().index!!, 1e-12)
+        assertEquals(withoutFirstOver.days.last().threshold!!, report.days.last().threshold!!, 1e-12)
+        assertEquals(ConditionStatus.CAUTION, report.status)
+    }
+    @Test fun ewmaStillReportedForChart() {
+        val r = ShortTrack.evaluate(days(30) + badDays(2, 2.4))
+        val (previous, first, last) = r.days.takeLast(3)
+        assertEquals(.25 * first.index!! + .75 * previous.ewma!!, first.ewma!!, 1e-9)
+        assertEquals(.25 * last.index!! + .75 * first.ewma!!, last.ewma!!, 1e-9)
+        assertEquals(ConditionStatus.CAUTION, r.status)
+    }
     private val start = LocalDate.of(2026, 1, 1)
     private fun days(n: Int, startAfter: Int = 0): List<DayInput> {
         val random = Random(7)
@@ -22,7 +43,7 @@ class ShortTrackTest {
     @Test fun nightOnlyDayIsHold() = assertEquals(ConditionStatus.HOLD, ShortTrack.evaluate(days(30) + nightOnlyDay()).status)
     @Test fun fifteenDayGapRestartsBaseline() = assertEquals(ConditionStatus.BUILDING, ShortTrack.evaluate(days(30) + days(3, startAfter = 45)).status)
     @Test fun explicitResetAndRollingWindowRequireFreshSevenDays() {
-        val r = ShortTrack.evaluate(days(30), setOf(start.plusDays(25)))
+        val r = ShortTrack.evaluate(days(30), setOf(Reset(start.plusDays(25), ResetKind.ALL)))
         assertEquals(ConditionStatus.BUILDING, r.status)
         assertNull(r.days.last().index)
     }

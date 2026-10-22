@@ -9,6 +9,25 @@ import kotlinx.serialization.json.Json
 import kotlin.test.*
 
 class FeaturesTest {
+    @Test fun noisyStraightStillGivesSteeringStd() {
+        val random = java.util.Random(73)
+        val samples = wobble(3.0).map { it.copy(headingDeg = random.nextGaussian() * 3) }
+        assertEquals(3.0, ex(trip(samples)).steeringStd!!, 1e-9)
+    }
+    @Test fun signalFiveSecondsBeforeNoisyTurnIsNotMissed() {
+        val random = java.util.Random(73)
+        val samples = List(90) { i -> s(speed = 30.0,
+            heading = (if (i < 60) 0.0 else -minOf(i - 59, 8) * 90.0 / 8) + random.nextGaussian() * 3,
+            signal = if (i in 55..75) Signal.LEFT else Signal.OFF) }
+        val f = ex(trip(samples, listOf(TurnAhead(t(50), Signal.LEFT, 150.0))))
+        assertEquals(1, f.announcedTurns)
+        assertEquals(0, f.signalMisses)
+    }
+    @Test fun jitteredOneHzStillCountsAsStraightWindow() {
+        val raw = trip(wobble(3.0))
+        val jittered = raw.copy(samples = raw.samples.mapIndexed { i, s -> s.copy(tMs = base + i * 1003L) })
+        assertEquals(3.0, ex(jittered).steeringStd!!, 1e-9)
+    }
     private val KST = ZoneId.of("Asia/Seoul")
     private val base = LocalDateTime.parse("2026-05-12T12:00").atZone(KST).toInstant().toEpochMilli()
     private fun t(seconds: Int) = base + seconds * 1000L
@@ -67,11 +86,11 @@ class FeaturesTest {
         assertEquals(1, f.leftTurns)
         assertEquals(1, f.announcedTurns)
     }
-    @Test fun signalAfterTurnStartsCannotCancelAMiss() {
+    @Test fun signalDuringTurnCountsAsAnnounced() {
         val samples = (cruise(30.0, 30) + leftTurn(8)).mapIndexed { i, sample ->
             if (i >= 32) sample.copy(signal = Signal.LEFT) else sample
         }
-        assertEquals(1, ex(trip(samples, listOf(TurnAhead(t(10), Signal.LEFT, 100.0)))).signalMisses)
+        assertEquals(0, ex(trip(samples, listOf(TurnAhead(t(10), Signal.LEFT, 100.0)))).signalMisses)
     }
     @Test fun hazardBeforeTurnCountsAsSignal() {
         val samples = (cruise(30.0, 30) + leftTurn(8)).mapIndexed { i, sample ->

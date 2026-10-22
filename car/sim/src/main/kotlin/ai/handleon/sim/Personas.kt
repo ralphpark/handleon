@@ -14,9 +14,11 @@ internal data class Replay(val version: Int, val persona: String, val trips: Lis
 object Personas {
     private val zone = ZoneId.of("Asia/Seoul")
 
-    // Seeds were selected for the prescribed replay outcomes; Generator assumptions are unchanged.
-    fun father(): List<TripFeatures> = Generator.trips(
-        Persona(0, YearMonth.of(2025, 11), 60.0, 12, 30.0, 11L), YearMonth.of(2024, 11), 24)
+    // Seed 21 is the first 1..200 candidate with A's summer first TALK and October TALK.
+    // Seed 11's former TALK depended on the artificial OPERATION path corrected by 01b.
+    const val FATHER_SEED = 21L
+    fun father(seed: Long = FATHER_SEED): List<TripFeatures> = Generator.trips(
+        Persona(0, YearMonth.of(2025, 11), 60.0, 12, 30.0, seed), YearMonth.of(2024, 11), 24)
 
     fun child(): List<TripFeatures> {
         val start = LocalDate.of(2026, 8, 24)

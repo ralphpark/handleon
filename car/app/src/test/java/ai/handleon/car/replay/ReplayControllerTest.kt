@@ -68,8 +68,8 @@ class ReplayControllerTest {
         val data = load("father")
         assertEquals(1, data.version)
         assertEquals("father", data.persona)
-        assertEquals(1231, data.trips.size)
-        assertEquals(1730430365000L, data.trips.first().startMs)
+        assertEquals(1294, data.trips.size)
+        assertEquals(1730432296000L, data.trips.first().startMs)
     }
 
     @Test fun parserRejectsUnsupportedVersion() {

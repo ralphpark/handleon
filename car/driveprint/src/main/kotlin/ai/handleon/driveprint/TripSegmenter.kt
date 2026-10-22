@@ -1,11 +1,33 @@
 package ai.handleon.driveprint
 
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.json.Json
+
 /** Feed chronological vehicle samples; asynchronous events are joined by timestamp. */
 class TripSegmenter {
     private val samples = mutableListOf<Sample>()
     private val navi = mutableListOf<NaviEvent>()
     private val telltales = mutableListOf<TelltaleOn>()
     private var parkedSince: Long? = null
+
+    @Serializable
+    private data class Checkpoint(val samples: List<Sample>, val navi: List<NaviEvent>,
+        val telltales: List<TelltaleOn>, val parkedSince: Long?)
+
+    fun snapshot(): String = Json.encodeToString(Checkpoint(samples, navi, telltales, parkedSince))
+
+    fun restore(json: String) {
+        val state = Json.decodeFromString<Checkpoint>(json)
+        require(state.samples.zipWithNext().all { (a, b) -> a.tMs <= b.tMs }) { "Samples must be chronological" }
+        val parked = state.samples.takeLastWhile { it.gear == Gear.P }.firstOrNull()?.tMs
+        require(state.parkedSince == parked) { "Invalid parking checkpoint" }
+        samples.clear(); samples.addAll(state.samples)
+        navi.clear(); navi.addAll(state.navi)
+        telltales.clear(); telltales.addAll(state.telltales)
+        parkedSince = state.parkedSince
+    }
 
     fun push(s: Sample): RawTrip? {
         val previous = samples.lastOrNull()

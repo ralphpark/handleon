@@ -11,7 +11,7 @@ object Scoring {
     fun change(f: FeatureId, z: Double): Double = when (f.direction) {
         Direction.DOWN -> -z
         Direction.UP -> z
-        Direction.BOTH -> abs(z)
+        Direction.BOTH -> abs(z) - if (f == FeatureId.O1 || f == FeatureId.O2) 0.6745 else 0.0
     }
 
     /** scores must already contain change(feature, rawZ); direction is applied exactly once. */
