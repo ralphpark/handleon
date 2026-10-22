@@ -1,0 +1,85 @@
+{
+  "semanticSegments": [
+    {
+      "startTime": "2026-10-22T08:12:00+09:00",
+      "endTime": "2026-10-22T08:40:00+09:00",
+      "activity": {
+        "start": {
+          "latLng": "37.4127°, 127.0947°"
+        },
+        "end": {
+          "latLng": "37.3951°, 127.1114°"
+        },
+        "distanceMeters": 12300,
+        "topCandidate": {
+          "type": "IN_PASSENGER_VEHICLE"
+        }
+      }
+    },
+    {
+      "startTime": "2026-10-23T08:12:00+09:00",
+      "endTime": "2026-10-23T08:40:00+09:00",
+      "activity": {
+        "start": {
+          "latLng": "37.4127°, 127.0947°"
+        },
+        "end": {
+          "latLng": "37.3951°, 127.1114°"
+        },
+        "distanceMeters": 1600,
+        "topCandidate": {
+          "type": "in passenger vehicle"
+        }
+      }
+    },
+    {
+      "startTime": "2026-10-24T08:12:00+09:00",
+      "endTime": "2026-10-24T08:40:00+09:00",
+      "activity": {
+        "start": {
+          "latLng": "37.4127°, 127.0947°"
+        },
+        "end": {
+          "latLng": "37.3951°, 127.1114°"
+        },
+        "distanceMeters": 300,
+        "topCandidate": {
+          "type": "In_Passenger Vehicle"
+        }
+      }
+    },
+    {
+      "startTime": "2026-10-25T08:12:00+09:00",
+      "endTime": "2026-10-25T08:40:00+09:00",
+      "activity": {
+        "start": {
+          "latLng": "37.4127°, 127.0947°"
+        },
+        "end": {
+          "latLng": "37.3951°, 127.1114°"
+        },
+        "distanceMeters": 700,
+        "topCandidate": {
+          "type": "WALKING"
+        }
+      }
+    },
+    {
+      "startTime": "2026-10-26T08:12:00+09:00",
+      "endTime": "2026-10-26T08:40:00+09:00",
+      "activity": {
+        "start": {
+          "latLng": "37.4127°, 127.0947°"
+        },
+        "end": {
+          "latLng": "37.3951°, 127.1114°"
+        },
+        "distanceMeters": 4100,
+        "topCandidate": {
+          "type": "IN_BUS"
+        }
+      }
+    }
+  ],
+  "_fixture": "판교 부근의 가짜 좌표로 직접 만든 시험 자료이며 실제 개인 기록이 아닙니다."
+}

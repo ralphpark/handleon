@@ -1,0 +1,59 @@
+{
+  "timelineObjects": [
+    {
+      "activitySegment": {
+        "activityType": "IN_PASSENGER_VEHICLE",
+        "startLocation": {
+          "latitudeE7": 374127000,
+          "longitudeE7": 1270947000
+        },
+        "endLocation": {
+          "latitudeE7": 374103000,
+          "longitudeE7": 1271026000
+        },
+        "distance": 5500,
+        "duration": {
+          "startTimestamp": "2026-10-22T00:12:00Z",
+          "endTimestamp": "2026-10-22T00:30:00Z"
+        }
+      }
+    },
+    {
+      "activitySegment": {
+        "activityType": "IN_PASSENGER_VEHICLE",
+        "startLocation": {
+          "latitudeE7": 374127000,
+          "longitudeE7": 1270947000
+        },
+        "endLocation": {
+          "latitudeE7": 374103000,
+          "longitudeE7": 1271026000
+        },
+        "distance": 800,
+        "duration": {
+          "startTimestamp": "2026-10-23T00:12:00Z",
+          "endTimestamp": "2026-10-23T00:30:00Z"
+        }
+      }
+    },
+    {
+      "activitySegment": {
+        "activityType": "WALKING",
+        "startLocation": {
+          "latitudeE7": 374127000,
+          "longitudeE7": 1270947000
+        },
+        "endLocation": {
+          "latitudeE7": 374103000,
+          "longitudeE7": 1271026000
+        },
+        "distance": 500,
+        "duration": {
+          "startTimestamp": "2026-10-24T00:12:00Z",
+          "endTimestamp": "2026-10-24T00:30:00Z"
+        }
+      }
+    }
+  ],
+  "_fixture": "판교 부근의 가짜 좌표로 직접 만든 시험 자료이며 실제 개인 기록이 아닙니다."
+}
