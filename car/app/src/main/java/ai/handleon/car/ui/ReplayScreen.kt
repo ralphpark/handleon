@@ -25,7 +25,8 @@ data class ReplayUi(
 
 @Composable
 fun ReplayScreen(ui: ReplayUi, onPause: () -> Unit, onEnd: () -> Unit, onCenter: () -> Unit = {}) {
-    ScreenFrame(talk = ui.mode == Mode.MAEUM && ui.maeum.showCenter, notice = true, topBar = { wide ->
+    val talk = ui.mode == Mode.MAEUM && ui.maeum.showCenter
+    ScreenFrame(talk = talk, notice = true, footer = { wide -> if (talk) CenterBanner(onCenter, wide) }, topBar = { wide ->
         val banner = Modifier.fillMaxWidth().background(DarkTokens.replaySoft, RoundedCornerShape(28.dp))
             .border(1.dp, DarkTokens.replay.copy(alpha = .25f), RoundedCornerShape(28.dp)).padding(14.dp)
         if (wide) Row(banner, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(24.dp)) {
@@ -65,7 +66,6 @@ fun ReplayScreen(ui: ReplayUi, onPause: () -> Unit, onEnd: () -> Unit, onCenter:
                 GlassPanel(Modifier.fillMaxWidth(), padding = 32.dp) { TrendChart(ui.maeum.months, ui.maeum.thresholds, ui.maeum.baselineWindows) }
             }
             ui.maeum.homeHint?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = DarkTokens.inkMuted) }
-            if (ui.maeum.showCenter) CenterBanner(onCenter, wide)
         } else {
             Text(if (ui.frame == 0) "자녀 · 재생 준비 중" else "자녀 · ${ui.total}운전일 중 ${ui.frame}번째 날",
                 style = MaterialTheme.typography.labelLarge, color = DarkTokens.inkMuted)

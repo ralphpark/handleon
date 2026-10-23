@@ -160,7 +160,7 @@ fun Disclaimer(modifier: Modifier = Modifier) {
 
 @Composable
 fun ScreenFrame(talk: Boolean = false, notice: Boolean = false, topBar: (@Composable (Boolean) -> Unit)? = null,
-                content: @Composable ColumnScope.(Boolean) -> Unit) {
+                footer: (@Composable (Boolean) -> Unit)? = null, content: @Composable ColumnScope.(Boolean) -> Unit) {
     MidnightBackground(talk) {
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val wide = maxWidth >= 1000.dp
@@ -169,6 +169,8 @@ fun ScreenFrame(talk: Boolean = false, notice: Boolean = false, topBar: (@Compos
                 topBar?.invoke(wide)
                 Column(Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(28.dp)) { content(wide) }
+                // 스크롤 밖에 두어 창 크기와 상관없이 늘 보인다(센터 띠).
+                footer?.invoke(wide)
                 if (notice) Disclaimer()
             }
         }

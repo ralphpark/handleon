@@ -30,8 +30,15 @@ class MaeumScreenTest {
         compose.setContent { HandleOnTheme { MaeumScreen(MaeumUi.from(report, LatLon(37.4, 127.1))) } }
         compose.onNodeWithText(Copy.stageTitle(Stage.TALK)).performScrollTo().assertIsDisplayed()
         report.top.forEach { compose.onNodeWithText(Copy.line(it)).performScrollTo().assertIsDisplayed() }
-        compose.onNodeWithText("가까운 곳 보기").performScrollTo().assertIsDisplayed()
+        compose.onRoot().performTouchInput { swipeDown() }
+        compose.onNodeWithText("가까운 곳 보기").assertIsDisplayed()
         compose.onNodeWithText(DISCLAIMER).assertIsDisplayed()
+    }
+
+    @Test fun talkReplayShowsCenterWithoutScroll() {
+        val report = father()
+        compose.setContent { HandleOnTheme { ReplayScreen(ReplayUi(maeum = MaeumUi.from(report, null), frame = 24), {}, {}) } }
+        compose.onNodeWithText("가까운 곳 보기").assertIsDisplayed()
     }
 
     @Test fun noHomeShowsHint() {
