@@ -33,6 +33,7 @@
             android:name=".MainActivity"
             android:exported="true"
             android:resizeableActivity="true">
+            <meta-data android:name="distractionOptimized" android:value="true" />
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -44,7 +45,7 @@
             android:exported="false"
             android:foregroundServiceType="location" />
 
-        <receiver android:name=".collect.BootReceiver" android:exported="false">
+        <receiver android:name=".collect.BootReceiver" android:exported="false" android:enabled="false">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
             </intent-filter>

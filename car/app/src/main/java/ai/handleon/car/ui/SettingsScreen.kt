@@ -1,0 +1,81 @@
+package ai.handleon.car.ui
+
+import ai.handleon.car.engine.Mode
+import ai.handleon.car.ui.components.*
+import ai.handleon.car.ui.theme.DarkTokens
+import androidx.compose.foundation.layout.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.toggleableState
+import androidx.compose.ui.state.ToggleableState
+import androidx.compose.ui.unit.dp
+
+@Composable
+fun SettingsScreen(ui: SettingsUi, onMode: (Mode) -> Unit, onReplay: () -> Unit, onPresentation: (Boolean) -> Unit,
+                   onDeleteDialog: (Boolean) -> Unit, onDelete: () -> Unit, onBack: () -> Unit) {
+    ScreenFrame { wide ->
+        PageHeader("설정", onBack)
+        if (wide) Row(horizontalArrangement = Arrangement.spacedBy(28.dp)) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(16.dp)) { SettingsRows(ui, onMode, onReplay, onPresentation, onDeleteDialog) }
+            GlassPanel(Modifier.weight(1.1f).heightIn(min = 580.dp), padding = 44.dp) { PhonePlaceholder() }
+        } else {
+            SettingsRows(ui, onMode, onReplay, onPresentation, onDeleteDialog)
+            GlassPanel(Modifier.fillMaxWidth()) { PhonePlaceholder() }
+        }
+    }
+    if (ui.confirmDelete) AlertDialog(onDismissRequest = { if (!ui.busy) onDeleteDialog(false) },
+        title = { Text("내 데이터를 모두 지울까요?", style = MaterialTheme.typography.titleLarge) },
+        text = { Text("이 차에 모인 운전 지문과 라벨이 지워지고 첫 실행 화면으로 돌아가요.", style = MaterialTheme.typography.bodyMedium) },
+        confirmButton = { PillButton(if (ui.busy) "지우는 중이에요" else "모두 지우기", onDelete, kind = PillKind.CORAL, enabled = !ui.busy && ui.deletionAvailable) },
+        dismissButton = { PillButton("돌아가기", { onDeleteDialog(false) }, kind = PillKind.SECONDARY, enabled = !ui.busy) })
+}
+
+@Composable
+private fun SettingsRows(ui: SettingsUi, onMode: (Mode) -> Unit, onReplay: () -> Unit,
+                         onPresentation: (Boolean) -> Unit, onDeleteDialog: (Boolean) -> Unit) {
+    GlassPanel(Modifier.fillMaxWidth()) {
+        Text("모드", style = MaterialTheme.typography.titleMedium, color = DarkTokens.ink)
+        Spacer(Modifier.height(16.dp))
+        ModeChoices(ui.mode, onMode, !ui.busy)
+    }
+    SettingRow("휴대폰 연결", "서버 연결 후 쓸 수 있어요") {}
+    SettingRow("집 위치", if (ui.homeRegistered) "내비 즐겨찾기 '집'에서 가져왔어요" else "내비 즐겨찾기에 집을 등록해 주세요") {
+        Text(if (ui.homeRegistered) "등록됨" else "미등록", style = MaterialTheme.typography.labelLarge, color = if (ui.homeRegistered) DarkTokens.brand else DarkTokens.inkMuted)
+    }
+    SettingRow("24개월을 60초로 보기", "가상 인물의 운전 변화를 살펴봐요") { PillButton("재생", onReplay, kind = PillKind.REPLAY, enabled = !ui.busy) }
+    SettingRow("발표 모드", "시연용 설정을 저장해요") {
+        Row(Modifier.heightIn(min = 64.dp).semantics { toggleableState = if (ui.presentation) ToggleableState.On else ToggleableState.Off }
+            .midnightClick(!ui.busy, Role.Switch) { onPresentation(!ui.presentation) }, verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            Text(if (ui.presentation) "켜짐" else "꺼짐", style = MaterialTheme.typography.labelLarge, color = DarkTokens.inkMuted)
+            Switch(ui.presentation, onCheckedChange = null)
+        }
+    }
+    SettingRow("내 데이터 지우기", if (ui.deletionAvailable) "이 차에 모인 운전 지문과 라벨을 모두 지워요" else "데이터 삭제를 준비하고 있어요") {
+        PillButton("지우기", { onDeleteDialog(true) }, kind = PillKind.SECONDARY, enabled = !ui.busy && ui.deletionAvailable)
+    }
+}
+
+@Composable
+private fun SettingRow(title: String, detail: String, trailing: @Composable () -> Unit) {
+    GlassPanel(Modifier.fillMaxWidth()) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(title, style = MaterialTheme.typography.titleMedium, color = DarkTokens.ink)
+                Text(detail, style = MaterialTheme.typography.bodySmall, color = DarkTokens.inkMuted)
+            }
+            trailing()
+        }
+    }
+}
+
+@Composable
+private fun PhonePlaceholder() {
+    Text("휴대폰 연결", style = MaterialTheme.typography.titleLarge, color = DarkTokens.ink)
+    Spacer(Modifier.height(28.dp))
+    Text("서버 연결 후 쓸 수 있어요", style = MaterialTheme.typography.bodyMedium, color = DarkTokens.inkMuted)
+}

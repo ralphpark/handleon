@@ -26,7 +26,11 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -49,6 +53,7 @@ class CollectorService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        running.value = true
         startForeground(NOTIFICATION_ID, notification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
         runCatching { if (checkpoint.exists()) segmenter.restore(checkpoint.readText()) }
             .onFailure { Log.w(TAG, "체크포인트 복원 실패, 새로 시작: $it"); checkpoint.delete() }
@@ -64,10 +69,17 @@ class CollectorService : Service() {
     override fun onDestroy() {
         scope.cancel()
         listOf(vehicle::stop, car::stop, location::stop, navi::stop).forEach { runCatching { it() } }
-        // 정상 종료면 진행 중 트립을 닫아 저장한다
-        segmenter.flush()?.let { runBlocking { save(it) } }
-        checkpoint.delete()
-        super.onDestroy()
+        try {
+            // 하던 저장이 끝난 뒤 진행 중 트립을 닫아 저장한다. 데이터 지우기는 running 이 false 가 될 때까지 기다린다.
+            runBlocking {
+                scope.coroutineContext[Job]?.join()
+                segmenter.flush()?.let { save(it) }
+            }
+            checkpoint.delete()
+        } finally {
+            running.value = false
+            super.onDestroy()
+        }
     }
 
     private suspend fun tickLoop() {
@@ -112,11 +124,14 @@ class CollectorService : Service() {
     }
 
     companion object {
+        private val running = MutableStateFlow(false)
+        /** 서비스가 살아 있는 동안 true. onDestroy 의 마지막 저장까지 끝나야 false. */
+        val isRunning: StateFlow<Boolean> = running.asStateFlow()
         const val TAG = "HandleOnSignals"
         const val TRIP_TAG = "HandleOnTrip"
         private const val CHANNEL = "collect"
         private const val NOTIFICATION_ID = 1
-        private const val DEBUG_LOG = true // ponytail: 실측 단계라 켜 둠. 화면(T8)이 붙으면 끈다.
+        private const val DEBUG_LOG = false // 실측 때는 true 로 켜서 초당 샘플을 logcat 에 남긴다
 
         fun start(context: Context) {
             runCatching { context.startForegroundService(Intent(context, CollectorService::class.java)) }

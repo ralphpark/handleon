@@ -1,41 +1,118 @@
 package ai.handleon.car
 
+import ai.handleon.car.collect.BootReceiver
+import ai.handleon.car.collect.CollectorService
+import ai.handleon.car.engine.DailyWorker
+import ai.handleon.car.engine.Mode
+import ai.handleon.car.ui.Nav
+import ai.handleon.car.ui.ReplayViewModel
+import ai.handleon.car.ui.theme.HandleOnTheme
+import android.Manifest
+import android.car.Car
+import android.car.drivingstate.CarUxRestrictionsManager
+import android.content.ComponentName
+import android.content.pm.PackageManager
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import ai.handleon.car.collect.CollectorService
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
-import ai.handleon.car.ui.theme.HandleOnTheme
+import androidx.compose.runtime.*
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
+    private val graph get() = (application as HandleOnApp).graph
+    private var collectionAllowed by mutableStateOf(false)
+    private var driving by mutableStateOf(false)
+    private var car: Car? = null
+    private var ux: CarUxRestrictionsManager? = null
+    private val permissions = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+        finishOnboarding()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // 속도(CAR_SPEED)·위치는 런타임 퍼미션. 거부돼도 그 신호만 빠지고 수집은 돈다. 첫 실행 화면(T8)이 붙으면 그쪽으로 옮긴다.
-        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { CollectorService.start(this) }
-            .launch(RUNTIME_PERMISSIONS)
+        val onboarded = graph.firstRunComplete()
+        collectionAllowed = hasLocationPermission()
+        enableBootCollection(onboarded && collectionAllowed && !graph.erasingData)
+        if (!graph.erasingData) {
+            if (onboarded && collectionAllowed) CollectorService.start(this)
+            lifecycleScope.launch { runEngine(graph.mode()) }
+        }
+        connectUxRestrictions()
+        val replay = ViewModelProvider(this)[ReplayViewModel::class.java]
         setContent {
+            val engine by graph.engineRunner.state.collectAsStateWithLifecycle()
+            val onboarded by graph.setupCompleted.collectAsStateWithLifecycle()
             HandleOnTheme {
-                Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).padding(32.dp)) {
-                    Text("핸들온", style = MaterialTheme.typography.headlineLarge, color = MaterialTheme.colorScheme.onBackground)
-                }
+                Nav(graph, engine, replay, driving, onboarded, collectionAllowed,
+                    onStart = { mode -> graph.setMode(mode); permissions.launch(RUNTIME_PERMISSIONS) },
+                    onRequestPermissions = { permissions.launch(RUNTIME_PERMISSIONS) },
+                    onDataCleared = { enableBootCollection(false) })
             }
         }
+    }
+
+    private fun finishOnboarding() {
+        collectionAllowed = hasLocationPermission()
+        lifecycleScope.launch {
+            runEngine(graph.mode())
+            graph.setFirstRunComplete(true)
+            enableBootCollection(collectionAllowed)
+            // A location foreground service cannot start without location permission on Android 14+.
+            if (collectionAllowed) CollectorService.start(this@MainActivity)
+            DailyWorker.schedule(this@MainActivity, graph.mode())
+        }
+    }
+
+    private suspend fun runEngine(mode: Mode) {
+        try { graph.engineRunner.run(mode) }
+        catch (cancelled: CancellationException) { throw cancelled }
+        catch (e: Exception) { Log.w("HandleOnUi", "기록 갱신 실패", e) }
+    }
+
+    private fun hasLocationPermission() = checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+        checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+
+    private fun enableBootCollection(enabled: Boolean) {
+        packageManager.setComponentEnabledSetting(ComponentName(this, BootReceiver::class.java),
+            if (enabled) PackageManager.COMPONENT_ENABLED_STATE_ENABLED else PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+            PackageManager.DONT_KILL_APP)
+    }
+
+    private fun connectUxRestrictions() {
+        try {
+            car = Car.createCar(this, Handler(Looper.getMainLooper()), Car.CAR_WAIT_TIMEOUT_DO_NOT_WAIT) { connected, ready ->
+                if (!ready) { ux = null; driving = false; return@createCar }
+                try {
+                    val manager = connected.getCarManager(Car.CAR_UX_RESTRICTION_SERVICE) as CarUxRestrictionsManager
+                    ux = manager
+                    manager.registerListener { restriction -> runOnUiThread { driving = restriction.isRequiresDistractionOptimization } }
+                    driving = manager.currentCarUxRestrictions.isRequiresDistractionOptimization
+                } catch (e: Exception) { driving = false; Log.w("HandleOnUi", "차량 화면 제한 서비스에 연결하지 못했어요", e) }
+            }
+        } catch (e: Exception) { driving = false; Log.w("HandleOnUi", "차량 서비스에 연결하지 못했어요", e) }
+    }
+
+    override fun onDestroy() {
+        runCatching { ux?.unregisterListener() }
+        runCatching { car?.disconnect() }
+        ux = null; car = null
+        super.onDestroy()
     }
 
     private companion object {
         val RUNTIME_PERMISSIONS = arrayOf(
             "android.car.permission.CAR_SPEED",
-            android.Manifest.permission.ACCESS_FINE_LOCATION,
-            android.Manifest.permission.ACCESS_COARSE_LOCATION,
-            android.Manifest.permission.POST_NOTIFICATIONS,
+            Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.ACCESS_COARSE_LOCATION,
+            Manifest.permission.POST_NOTIFICATIONS,
         )
     }
 }

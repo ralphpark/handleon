@@ -1,19 +1,22 @@
 package ai.handleon.car.ui.theme
 
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
+import ai.handleon.car.R
+import androidx.compose.ui.text.ExperimentalTextApi
+import androidx.compose.ui.text.font.Font
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontVariation
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
-/** 클로드 디자인 "핸들온 HandleOn" 디자인 시스템 tokens.json(미드나잇, v2)의 색. 야간이 기본, 주간은 Pleos 조명 전환을 따른다. */
+/** 클로드 디자인 "핸들온 HandleOn" 디자인 시스템 tokens.json(미드나잇, v2)의 색. 차량 앱은 항상 야간으로 그린다. */
 @Immutable
 data class HandleOnColors(
     val surface: Color, val surfaceRaised: Color, val surfaceSunken: Color, val line: Color,
@@ -45,30 +48,46 @@ val DarkTokens = HandleOnColors(
     domainMobility = Color(0xFF4FE3C1), domainWayfinding = Color(0xFFA99CFF), domainOperation = Color(0xFFE8D5A3),
 )
 
-val LocalHandleOnColors = staticCompositionLocalOf { LightTokens }
+val LocalHandleOnColors = staticCompositionLocalOf { DarkTokens }
 
-// 차량 글자 크기: 디자인 시스템 "차량" 그룹 (최소 18px, Pleos 가이드)
-private val CarTypography = Typography(
-    displayLarge = TextStyle(fontSize = 58.sp, lineHeight = 70.sp, fontWeight = FontWeight.ExtraBold),
-    headlineLarge = TextStyle(fontSize = 44.sp, lineHeight = 56.sp, fontWeight = FontWeight.ExtraBold),
-    titleLarge = TextStyle(fontSize = 34.sp, lineHeight = 44.sp, fontWeight = FontWeight.SemiBold),
-    titleMedium = TextStyle(fontSize = 28.sp, lineHeight = 40.sp, fontWeight = FontWeight.SemiBold),
-    bodyLarge = TextStyle(fontSize = 28.sp, lineHeight = 40.sp),
-    bodyMedium = TextStyle(fontSize = 24.sp, lineHeight = 34.sp),
-    labelLarge = TextStyle(fontSize = 22.sp, lineHeight = 30.sp, fontWeight = FontWeight.SemiBold),
-    bodySmall = TextStyle(fontSize = 18.sp, lineHeight = 26.sp),
+@OptIn(ExperimentalTextApi::class)
+val AstaSans = FontFamily(
+    Font(R.font.asta_sans, FontWeight.W400, variationSettings = FontVariation.Settings(FontVariation.weight(400))),
+    Font(R.font.asta_sans, FontWeight.W500, variationSettings = FontVariation.Settings(FontVariation.weight(500))),
+    Font(R.font.asta_sans, FontWeight.W600, variationSettings = FontVariation.Settings(FontVariation.weight(600))),
+    Font(R.font.asta_sans, FontWeight.W700, variationSettings = FontVariation.Settings(FontVariation.weight(700))),
+    Font(R.font.asta_sans, FontWeight.W800, variationSettings = FontVariation.Settings(FontVariation.weight(800))),
+)
+
+private fun carText(size: Int, line: Int, weight: FontWeight = FontWeight.W400) =
+    TextStyle(fontFamily = AstaSans, fontSize = size.sp, lineHeight = line.sp, fontWeight = weight,
+        letterSpacing = if (size >= 44) (-1).sp else 0.sp)
+
+val CarTypography = Typography(
+    displayLarge = carText(58, 70, FontWeight.W800),
+    displayMedium = carText(58, 70, FontWeight.W800),
+    displaySmall = carText(48, 58, FontWeight.W800),
+    headlineLarge = carText(44, 56, FontWeight.W800),
+    headlineMedium = carText(36, 46, FontWeight.W700),
+    headlineSmall = carText(30, 40, FontWeight.W700),
+    titleLarge = carText(34, 44, FontWeight.W600),
+    titleMedium = carText(28, 40, FontWeight.W600),
+    titleSmall = carText(24, 34, FontWeight.W600),
+    bodyLarge = carText(28, 40),
+    bodyMedium = carText(24, 34),
+    bodySmall = carText(18, 26),
+    labelLarge = carText(22, 30, FontWeight.W600),
+    labelMedium = carText(20, 28, FontWeight.W600),
+    labelSmall = carText(18, 26, FontWeight.W500),
 )
 
 @Composable
-fun HandleOnTheme(dark: Boolean = isSystemInDarkTheme(), content: @Composable () -> Unit) {
-    val t = if (dark) DarkTokens else LightTokens
-    val scheme = if (dark) {
-        darkColorScheme(primary = t.brand, onPrimary = t.onBrand, background = t.surface, onBackground = t.ink,
-            surface = t.surfaceRaised, onSurface = t.ink, onSurfaceVariant = t.inkMuted, outline = t.line)
-    } else {
-        lightColorScheme(primary = t.brand, onPrimary = t.onBrand, background = t.surface, onBackground = t.ink,
-            surface = t.surfaceRaised, onSurface = t.ink, onSurfaceVariant = t.inkMuted, outline = t.line)
-    }
+fun HandleOnTheme(content: @Composable () -> Unit) {
+    // ponytail: Pleos 주간 전환은 나중에
+    val t = DarkTokens
+    val scheme = darkColorScheme(primary = t.brand, onPrimary = t.onBrand,
+        background = t.surface, onBackground = t.ink, surface = t.surfaceRaised,
+        onSurface = t.ink, onSurfaceVariant = t.inkMuted, outline = t.line)
     androidx.compose.runtime.CompositionLocalProvider(LocalHandleOnColors provides t) {
         MaterialTheme(colorScheme = scheme, typography = CarTypography, content = content)
     }
