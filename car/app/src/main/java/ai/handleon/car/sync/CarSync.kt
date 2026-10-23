@@ -47,6 +47,8 @@ class CarSync(
                 withContext(Dispatchers.IO) { state.setImportsPending(false) }
             }
         }
+        // 발표 모드에서는 서버에 재생 결과만 둔다(uploadReplay). 가져오기는 원본 위치 파일을 지우려고 위에서 계속 받는다.
+        if (presentation()) return@withLock SyncResult(imported = imported)
         when (currentMode) {
             Mode.MAEUM -> repo.report("LONG")?.let {
                 uploadMonth(driver, Json.decodeFromString<LongReport>(it), "car")

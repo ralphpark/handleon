@@ -56,6 +56,19 @@ class CarSyncTest {
         assertEquals(4, server.requestCount)
     }
 
+    @Test fun presentationKeepsReplayOnServerAndStillDrainsImports() = runTest {
+        state.setDriver("driver"); presentation = true
+        repo.saveReport("LONG", Json.encodeToString(longReport()))
+        repo.saveReport("LETTER", """{"month":"2026-10-01","text":"재생 편지"}""")
+        server.reply("""[{"driver_id":"driver"}]"""); server.reply("[]")
+        assertFalse(sync().syncOnce().synced)
+        assertEquals(listOf("/rest/v1/car_links", "/storage/v1/object/list/imports"),
+            List(2) { server.takeRequest().requestUrl!!.encodedPath })
+        assertEquals(2, server.requestCount)
+        assertNull(state.lastSyncMs)
+        assertEquals("재생 편지", Json.parseToJsonElement(repo.report("LETTER")!!).jsonObject["text"]!!.jsonPrimitive.content)
+    }
+
     @Test fun importedTripsRerunEngineBeforeUploadingBuildingMonth() = runTest {
         state.setDriver("driver")
         server.reply("""[{"driver_id":"driver"}]""")

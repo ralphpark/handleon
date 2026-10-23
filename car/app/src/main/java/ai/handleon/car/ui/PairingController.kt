@@ -14,7 +14,7 @@ import kotlinx.coroutines.sync.withLock
 data class PairingUi(
     val configured: Boolean = false, val driverId: String? = null, val lastSyncMs: Long? = null,
     val code: String? = null, val matrix: BitMatrix? = null, val remainingSeconds: Int = 0,
-    val busy: Boolean = false, val error: Boolean = false,
+    val busy: Boolean = false, val error: Boolean = false, val presentation: Boolean = false,
 )
 
 /** Owns network/timer state outside the stateless settings panel. The route drives poll/tick. */

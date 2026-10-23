@@ -187,7 +187,7 @@ fun Nav(graph: AppGraph, engine: EngineState, replay: ReplayViewModel, driving: 
                         }
                     }, onBack = ::back)
                 Screen.Settings -> SettingsScreen(SettingsUi(mode, presentation, home != null, deleteDialog, busy,
-                    pairing = pairing.copy(driverId = sync.driverId, lastSyncMs = sync.lastSyncMs)),
+                    pairing = pairing.copy(driverId = sync.driverId, lastSyncMs = sync.lastSyncMs, presentation = presentation)),
                     onMode = { selected -> action {
                         graph.setMode(selected); modeName = selected.name
                         DailyWorker.schedule(graph.context, selected)

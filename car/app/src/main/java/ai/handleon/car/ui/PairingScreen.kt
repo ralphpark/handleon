@@ -43,6 +43,7 @@ fun PairingScreen(ui: PairingUi, onNewCode: () -> Unit, onSync: () -> Unit) {
             ui.driverId != null -> {
                 Text("휴대폰과 연결됐어요", style = MaterialTheme.typography.titleMedium, color = DarkTokens.brand)
                 PairingText(ui.lastSyncMs?.let { "마지막으로 보낸 때: ${formatSyncTime(it)}" } ?: "아직 보내지 않았어요")
+                if (ui.presentation) PairingText("발표 모드에서는 재생이 끝날 때 재생 결과만 보내요")
                 PillButton("지금 보내기", onSync, enabled = !ui.busy)
                 PillButton("다른 휴대폰으로 바꾸기", onNewCode, kind = PillKind.SECONDARY, enabled = !ui.busy)
             }
