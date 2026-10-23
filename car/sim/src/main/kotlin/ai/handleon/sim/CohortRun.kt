@@ -55,7 +55,7 @@ object CohortRun {
             outcome(p.id, p.declineOnset, RuleComparison.stages(p.monthly, START, months, rule), p.monthly)
         }) }
         val measured = metrics(outcomes)
-        check(comparison.getValue("A") == measured) { "Rule A must reproduce the engine results" }
+        check(comparison.getValue("D") == measured) { "Rule D (engine default) must reproduce the engine results" }
         return CohortResult(measured.sensitivity, measured.falseAlarmsPerPersonYear, measured.medianLeadMonths,
             outcomes, measured.normalWatchMonthRatio, measured.normalWatchPersonRatio, comparison)
     }

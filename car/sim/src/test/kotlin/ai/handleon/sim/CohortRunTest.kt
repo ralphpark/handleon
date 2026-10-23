@@ -25,8 +25,8 @@ class CohortRunTest {
         val r = CohortRun.run(drivers = 20, months = 24, seed = 7)
         assertTrue(r.sensitivity in 0.0..1.0); assertTrue(r.falseAlarmsPerPersonYear >= 0.0)
         assertEquals(20, r.perPersona.size)
-        for (p in r.perPersona) assertEquals(p.stages, RuleComparison.stages(p.monthly, CohortRun.START, 24, Rule.A))
-        assertEquals(r.sensitivity, r.ruleComparison.getValue("A").sensitivity)
+        for (p in r.perPersona) assertEquals(p.stages, RuleComparison.stages(p.monthly, CohortRun.START, 24, Rule.D))
+        assertEquals(r.sensitivity, r.ruleComparison.getValue("D").sensitivity)
         assertEquals(setOf("A", "D", "K"), r.ruleComparison.keys)
     }
     @Test fun permanentLifestyleChangeKeepsBaselineAndThinsLaterMonths() {

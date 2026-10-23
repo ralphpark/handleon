@@ -38,6 +38,16 @@ object YearMonthSerializer : KSerializer<YearMonth> {
 }
 
 object LongTrack {
+    /**
+     * 대화 권유 규칙 D (사용자 결정 2026-10-23): 이번 달 2개 이상 영역이 평소 범위를 넘고,
+     * 그중 하나 이상은 직전 평가된 달에도 넘었으면 TALK. 시뮬레이터 비교: A 0.31 → D 0.74, 오경보 둘 다 0.
+     */
+    fun stageOf(current: MonthResult, previous: MonthResult?): Stage = when {
+        current.over.size >= 2 && previous != null && current.over.any { it in previous.over } -> Stage.TALK
+        current.over.isNotEmpty() -> Stage.WATCH
+        else -> Stage.STABLE
+    }
+
     fun evaluate(months: List<MonthInput>, resets: Set<Reset> = emptySet()): LongReport {
         val building = LongReport(Stage.BUILDING, emptyList(), emptyMap(), emptyMap(), emptyList(), null)
         if (months.isEmpty()) return building
@@ -98,12 +108,7 @@ object LongTrack {
         }
         val current = results.lastOrNull()
         val previous = results.dropLast(1).lastOrNull()
-        val stage = when {
-            current == null -> Stage.BUILDING
-            previous != null && current.over.intersect(previous.over).size >= 2 -> Stage.TALK
-            current.over.isNotEmpty() -> Stage.WATCH
-            else -> Stage.STABLE
-        }
+        val stage = current?.let { stageOf(it, previous) } ?: Stage.BUILDING
         val raw = current?.let { result -> active.first { it.month == result.month }.values.mapNotNull { (f, value) ->
             windows[f]?.takeIf { result.month >= it.toExclusive && !excluded(f, result.month) }?.let { f to Stats.z(value, baselines.getValue(f)) }
         }.toMap() }.orEmpty()

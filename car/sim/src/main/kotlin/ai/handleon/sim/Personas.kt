@@ -14,9 +14,9 @@ internal data class Replay(val version: Int, val persona: String, val trips: Lis
 object Personas {
     private val zone = ZoneId.of("Asia/Seoul")
 
-    // Seed 21 is the first 1..200 candidate with A's summer first TALK and October TALK.
-    // Seed 11's former TALK depended on the artificial OPERATION path corrected by 01b.
-    const val FATHER_SEED = 21L
+    // 규칙 D(엔진 기본, 2026-10-23) 아래에서 첫 TALK 가 2026-09 이고 10월도 TALK 인 첫 시드.
+    // (규칙 A 때는 21. 01b 전의 11 은 OPERATION 인위 경로로 TALK 였다.) 탐색: :sim:run --args="--search-father-seeds 60"
+    const val FATHER_SEED = 17L
     fun father(seed: Long = FATHER_SEED): List<TripFeatures> = Generator.trips(
         Persona(0, YearMonth.of(2025, 11), 60.0, 12, 30.0, seed), YearMonth.of(2024, 11), 24)
 

@@ -81,6 +81,6 @@ fun main(args: Array<String>) {
         " medianLeadMonths=" + result.medianLeadMonths)
     println("output=" + out.canonicalPath + " acceptanceGate=" + accepted)
     println("normalWatchMonthRatio=${result.normalWatchMonthRatio} normalWatchPersonRatio=${result.normalWatchPersonRatio}")
-    println("lifestyleVariant=" + lifestyle.ruleComparison.getValue("A"))
+    println("lifestyleVariant=" + lifestyle.ruleComparison.getValue("D"))
     result.ruleComparison.forEach { (rule, metrics) -> println("rule=$rule $metrics") }
 }

@@ -9,6 +9,19 @@ import kotlinx.serialization.json.Json
 import kotlin.test.*
 
 class LongTrackTest {
+    // 대화 권유 규칙 D (사용자 결정 2026-10-23): 이번 달 2개 이상 영역이 넘고, 그중 하나 이상은 전달에도 넘었으면 TALK.
+    private fun month(i: Long, vararg over: Domain) = MonthResult(YearMonth.of(2026, 1).plusMonths(i), over.associateWith { 2.0 }, over.toSet())
+    @Test fun ruleDTalksWhenTwoNowAndOneRepeated() =
+        assertEquals(Stage.TALK, LongTrack.stageOf(month(1, Domain.MOBILITY, Domain.WAYFINDING), month(0, Domain.MOBILITY)))
+    @Test fun ruleDTalksWhenDifferentPairsShareOne() =
+        assertEquals(Stage.TALK, LongTrack.stageOf(month(1, Domain.WAYFINDING, Domain.OPERATION), month(0, Domain.MOBILITY, Domain.WAYFINDING)))
+    @Test fun ruleDNeedsTwoDomainsThisMonth() =
+        assertEquals(Stage.WATCH, LongTrack.stageOf(month(1, Domain.MOBILITY), month(0, Domain.MOBILITY, Domain.WAYFINDING)))
+    @Test fun ruleDNeedsOneRepeatedDomain() =
+        assertEquals(Stage.WATCH, LongTrack.stageOf(month(1, Domain.MOBILITY, Domain.WAYFINDING), month(0, Domain.OPERATION)))
+    @Test fun noPreviousMonthIsNotTalk() =
+        assertEquals(Stage.WATCH, LongTrack.stageOf(month(1, Domain.MOBILITY, Domain.WAYFINDING), null))
+    @Test fun nothingOverIsStable() = assertEquals(Stage.STABLE, LongTrack.stageOf(month(1), month(0, Domain.MOBILITY)))
     private fun staggeredWayfinding(lateStart: Int, spikeInOverlap: Boolean = false): List<MonthInput> =
         List(12) { i -> MonthInput(YearMonth.of(2026, 1).plusMonths(i.toLong()), buildMap {
             put(FeatureId.W2, if (i == 0 || spikeInOverlap && i == 5) 0.05 else 0.5)
