@@ -14,7 +14,7 @@ import androidx.compose.ui.unit.dp
 
 @Composable
 fun MaeumScreen(ui: MaeumUi, onLabels: () -> Unit = {}, onSettings: () -> Unit = {},
-                onCenter: () -> Unit = {}, onTab: (Boolean) -> Unit = {}) {
+                onCenter: () -> Unit = {}, onTab: (Boolean) -> Unit = {}, onLetter: () -> Unit = {}) {
     ScreenFrame(talk = ui.showCenter, notice = true, footer = { wide ->
         if (ui.showCenter && !ui.pastSelected) {
             if (wide) CenterBanner(onCenter, true)
@@ -29,18 +29,22 @@ fun MaeumScreen(ui: MaeumUi, onLabels: () -> Unit = {}, onSettings: () -> Unit =
             GlassPanel(Modifier.fillMaxWidth(), padding = 32.dp) { TrendChart(ui.months, ui.thresholds, ui.baselineWindows) }
             ReplayNotice(BlueLinkMock.NOTICE)
             GlassPanel(Modifier.fillMaxWidth(), padding = 32.dp) { DistanceChart(ui.blueLink) }
-        } else MaeumContent(ui, wide)
+        } else MaeumContent(ui, wide, onLetter)
     }
 }
 
 @Composable
-fun MaeumContent(ui: MaeumUi, wide: Boolean) {
+fun MaeumContent(ui: MaeumUi, wide: Boolean, onLetter: () -> Unit = {}) {
     if (wide) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(28.dp)) {
         MaeumHero(ui, Modifier.weight(1f), compact = false)
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(20.dp)) { MaeumReasons(ui) }
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(20.dp)) {
+            MaeumReasons(ui)
+            ui.visibleLetter?.let { LetterCard(it, onLetter) }
+        }
     } else {
         MaeumHero(ui, Modifier.fillMaxWidth(), compact = true)
         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) { MaeumReasons(ui, compact = true) }
+        ui.visibleLetter?.let { LetterCard(it, onLetter) }
     }
     ui.homeHint?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = DarkTokens.inkMuted) }
 }

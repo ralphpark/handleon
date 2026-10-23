@@ -26,6 +26,7 @@ class EngineRunner(
     private val repo: TripStore,
     private val engine: Driveprint = Driveprint(),
     private val clock: () -> ZonedDateTime = { ZonedDateTime.now(ZoneId.of("Asia/Seoul")) },
+    private val onSaved: () -> Unit = {},
 ) {
     private val mutex = Mutex()
     private val mutableState = MutableStateFlow(EngineState(null, null, 0))
@@ -49,6 +50,7 @@ class EngineRunner(
         }
         next.long?.let { repo.saveReport("LONG", Json.encodeToString(it)) }
         next.condition?.let { repo.saveReport("CONDITION", Json.encodeToString(it)) }
+        onSaved()
         mutableState.value = next
         next
     }

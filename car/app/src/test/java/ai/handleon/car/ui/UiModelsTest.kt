@@ -8,6 +8,14 @@ import org.junit.Test
 import kotlin.test.*
 
 class UiModelsTest {
+    @Test fun letterCardAppearsOnlyWithLetterOnCurrentTab() {
+        val letter = LetterUi(YearMonth.of(2026, 10), "첫 줄\n핸들온 드림")
+        assertNull(MaeumUi.from(null, null).visibleLetter)
+        val ui = MaeumUi.from(null, null, letter = letter)
+        assertEquals("10월 운전 편지", ui.visibleLetter!!.title)
+        assertEquals("첫 줄", ui.visibleLetter!!.preview)
+        assertNull(ui.copy(pastSelected = true).visibleLetter)
+    }
     private fun report(stage: Stage) = LongReport(stage, emptyList(), emptyMap(), emptyMap(), emptyList(), null)
 
     @Test fun talkShowsCenterAndOtherStagesDoNot() {

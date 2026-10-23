@@ -1,9 +1,11 @@
 package ai.handleon.car.ui
 
 import ai.handleon.car.engine.Mode
+import ai.handleon.car.HandleOnApp
 import ai.handleon.car.replay.ReplayController
 import ai.handleon.car.replay.ReplayParser
 import ai.handleon.driveprint.Driveprint
+import ai.handleon.driveprint.LongReport
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import java.time.Instant
@@ -41,6 +43,7 @@ class ReplayViewModel : ViewModel() {
                 mutable.update { it.copy(start = first, total = if (mode == Mode.MAEUM && first != null)
                     ChronoUnit.MONTHS.between(first, YearMonth.from(dates.last())).toInt() + 1 else dates.distinct().size) }
                 val controller = ReplayController(trips, Driveprint())
+                var finalReport: LongReport? = null
                 if (mode == Mode.MAEUM) controller.monthly().flowOn(Dispatchers.Default).buffer(0).collect { report ->
                     running.first { it }
                     val month = first?.plusMonths(mutable.value.frame.toLong())
@@ -49,11 +52,17 @@ class ReplayViewModel : ViewModel() {
                     })
                     // Assets have no home metadata: do not invent a registered home.
                     mutable.update { it.copy(maeum = MaeumUi.from(report, null, progress), frame = it.frame + 1, stages = it.stages + report.stage) }
+                    finalReport = report
                 } else controller.daily().flowOn(Dispatchers.Default).buffer(0).collect { report ->
                     running.first { it }
                     mutable.update { it.copy(condition = ConditionUi.from(report), frame = it.frame + 1) }
                 }
                 mutable.update { it.copy(complete = true) }
+                finalReport?.let { report ->
+                    try { (app as HandleOnApp).graph.carSync.uploadReplay(report) }
+                    catch (cancelled: CancellationException) { throw cancelled }
+                    catch (_: Exception) { /* Playback remains complete; no sensitive network errors enter UI/logs. */ }
+                }
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (_: Exception) { mutable.update { it.copy(error = "재생 기록을 열지 못했어요. 재생을 끝내고 다시 열어 주세요.") } }
         }

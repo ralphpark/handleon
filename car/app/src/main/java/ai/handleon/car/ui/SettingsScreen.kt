@@ -16,15 +16,16 @@ import androidx.compose.ui.unit.dp
 
 @Composable
 fun SettingsScreen(ui: SettingsUi, onMode: (Mode) -> Unit, onReplay: () -> Unit, onPresentation: (Boolean) -> Unit,
-                   onDeleteDialog: (Boolean) -> Unit, onDelete: () -> Unit, onBack: () -> Unit) {
+                   onDeleteDialog: (Boolean) -> Unit, onDelete: () -> Unit, onBack: () -> Unit,
+                   onNewCode: () -> Unit = {}, onSync: () -> Unit = {}) {
     ScreenFrame { wide ->
         PageHeader("설정", onBack)
         if (wide) Row(horizontalArrangement = Arrangement.spacedBy(28.dp)) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(16.dp)) { SettingsRows(ui, onMode, onReplay, onPresentation, onDeleteDialog) }
-            GlassPanel(Modifier.weight(1.1f).heightIn(min = 580.dp), padding = 44.dp) { PhonePlaceholder() }
+            GlassPanel(Modifier.weight(1.1f).heightIn(min = 580.dp), padding = 44.dp) { PairingScreen(ui.pairing, onNewCode, onSync) }
         } else {
             SettingsRows(ui, onMode, onReplay, onPresentation, onDeleteDialog)
-            GlassPanel(Modifier.fillMaxWidth()) { PhonePlaceholder() }
+            GlassPanel(Modifier.fillMaxWidth()) { PairingScreen(ui.pairing, onNewCode, onSync) }
         }
     }
     if (ui.confirmDelete) AlertDialog(onDismissRequest = { if (!ui.busy) onDeleteDialog(false) },
@@ -33,7 +34,6 @@ fun SettingsScreen(ui: SettingsUi, onMode: (Mode) -> Unit, onReplay: () -> Unit,
         confirmButton = { PillButton(if (ui.busy) "지우는 중이에요" else "모두 지우기", onDelete, kind = PillKind.CORAL, enabled = !ui.busy && ui.deletionAvailable) },
         dismissButton = { PillButton("돌아가기", { onDeleteDialog(false) }, kind = PillKind.SECONDARY, enabled = !ui.busy) })
 }
-
 @Composable
 private fun SettingsRows(ui: SettingsUi, onMode: (Mode) -> Unit, onReplay: () -> Unit,
                          onPresentation: (Boolean) -> Unit, onDeleteDialog: (Boolean) -> Unit) {
@@ -42,7 +42,7 @@ private fun SettingsRows(ui: SettingsUi, onMode: (Mode) -> Unit, onReplay: () ->
         Spacer(Modifier.height(16.dp))
         ModeChoices(ui.mode, onMode, !ui.busy)
     }
-    SettingRow("휴대폰 연결", "서버 연결 후 쓸 수 있어요") {}
+    SettingRow("휴대폰 연결", if (ui.pairing.driverId == null) "연결된 휴대폰 없음" else "휴대폰과 연결됐어요") {}
     SettingRow("집 위치", if (ui.homeRegistered) "내비 즐겨찾기 '집'에서 가져왔어요" else "내비 즐겨찾기에 집을 등록해 주세요") {
         Text(if (ui.homeRegistered) "등록됨" else "미등록", style = MaterialTheme.typography.labelLarge, color = if (ui.homeRegistered) DarkTokens.brand else DarkTokens.inkMuted)
     }
@@ -71,11 +71,4 @@ private fun SettingRow(title: String, detail: String, trailing: @Composable () -
             trailing()
         }
     }
-}
-
-@Composable
-private fun PhonePlaceholder() {
-    Text("휴대폰 연결", style = MaterialTheme.typography.titleLarge, color = DarkTokens.ink)
-    Spacer(Modifier.height(28.dp))
-    Text("서버 연결 후 쓸 수 있어요", style = MaterialTheme.typography.bodyMedium, color = DarkTokens.inkMuted)
 }

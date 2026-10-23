@@ -7,6 +7,9 @@ import ai.handleon.car.engine.EngineRunner
 import ai.handleon.car.engine.Mode
 import ai.handleon.car.store.Db
 import ai.handleon.car.store.TripRepository
+import ai.handleon.car.sync.*
+import okhttp3.OkHttpClient
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
@@ -24,7 +27,16 @@ class HandleOnApp : Application() {
 class AppGraph(val context: Context) {
     val db: Db by lazy { Room.databaseBuilder(context.applicationContext, Db::class.java, "handleon.db").build() }
     val tripRepository: TripRepository by lazy { TripRepository(db) }
-    val engineRunner: EngineRunner by lazy { EngineRunner(tripRepository) }
+    val engineRunner: EngineRunner by lazy { EngineRunner(tripRepository, onSaved = { SyncWorker.enqueue(context) }) }
+    val syncState by lazy { SyncState(context.getSharedPreferences("handleon_sync", Context.MODE_PRIVATE)) }
+    val supabase by lazy {
+        SupabaseClient(BuildConfig.SUPABASE_URL, BuildConfig.SUPABASE_ANON_KEY,
+            // 편지 함수는 모델 호출에 최대 20초를 쓴다. OkHttp 기본 읽기 대기 10초로는 응답 직전에 끊긴다.
+            OkHttpClient.Builder().readTimeout(40, TimeUnit.SECONDS).callTimeout(45, TimeUnit.SECONDS).build(),
+            PreferenceTokenStore(context) { syncState.setDriver(null) })
+    }
+    val pairing by lazy { Pairing(supabase) }
+    val carSync by lazy { CarSync(supabase, syncState, tripRepository, engineRunner, ::mode, ::presentation) }
     private val prefs by lazy { context.getSharedPreferences("handleon", Context.MODE_PRIVATE) }
     private val setupState = MutableStateFlow(firstRunComplete())
     val setupCompleted = setupState.asStateFlow()

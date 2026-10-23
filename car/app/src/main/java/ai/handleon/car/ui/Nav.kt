@@ -6,6 +6,7 @@ import ai.handleon.car.collect.CollectorService
 import ai.handleon.car.engine.DailyWorker
 import ai.handleon.car.engine.EngineState
 import ai.handleon.car.engine.Mode
+import ai.handleon.car.sync.SyncWorker
 import ai.handleon.car.ui.components.PillButton
 import ai.handleon.car.ui.components.PillKind
 import ai.handleon.car.ui.theme.DarkTokens
@@ -36,8 +37,9 @@ sealed class Screen(val key: String) {
     data object Settings : Screen("settings")
     data object Replay : Screen("replay")
     data object Center : Screen("center")
+    data object Letter : Screen("letter")
     companion object {
-        fun from(key: String): Screen = listOf(FirstRun, Home, Labels, Settings, Replay, Center).firstOrNull { it.key == key } ?: Home
+        fun from(key: String): Screen = listOf(FirstRun, Home, Labels, Settings, Replay, Center, Letter).firstOrNull { it.key == key } ?: Home
     }
 }
 
@@ -66,6 +68,12 @@ fun Nav(graph: AppGraph, engine: EngineState, replay: ReplayViewModel, driving: 
     var resets by remember { mutableStateOf<List<Pair<LocalDate, String>>>(emptyList()) }
     var blueLink by remember { mutableStateOf(emptyList<ai.handleon.car.warmstart.BlueLinkMonth>()) }
     var centerUi by remember { mutableStateOf(CenterUi()) }
+    var letter by remember { mutableStateOf<LetterUi?>(null) }
+    val sync by graph.syncState.state.collectAsStateWithLifecycle()
+    val pairingController = remember(graph) {
+        PairingController(graph.supabase.configured, graph.pairing, graph.syncState, { SyncWorker.enqueue(graph.context) })
+    }
+    val pairing by pairingController.state.collectAsStateWithLifecycle()
     val centerNavigator = remember(graph) { CenterNavigator(graph.context) }
     val scope = rememberCoroutineScope()
     val mode = Mode.valueOf(modeName)
@@ -111,6 +119,19 @@ fun Nav(graph: AppGraph, engine: EngineState, replay: ReplayViewModel, driving: 
         if (onboarded) try { refreshLocal() } catch (cancelled: CancellationException) { throw cancelled }
         catch (_: Exception) { error = "저장된 기록을 열지 못했어요." }
     }
+    LaunchedEffect(sync, engine.updatedMs, onboarded) {
+        letter = if (onboarded && sync.driverId != null && sync.lastSyncMs != null) {
+            LetterUi.fromJson(graph.carSync.savedLetter())
+        } else null
+    }
+    LaunchedEffect(screen, driving, lifecycleState) {
+        if (screen == Screen.Settings && !driving && lifecycleState.isAtLeast(Lifecycle.State.RESUMED)) {
+            coroutineScope {
+                launch { while (isActive) { pairingController.tick(); delay(1000) } }
+                while (isActive) { pairingController.poll(); delay(3000) }
+            }
+        }
+    }
     LaunchedEffect(past) {
         if (past) try { blueLink = withContext(Dispatchers.IO) { BlueLinkMock.load(graph.context) } }
         catch (cancelled: CancellationException) { throw cancelled }
@@ -151,8 +172,9 @@ fun Nav(graph: AppGraph, engine: EngineState, replay: ReplayViewModel, driving: 
                     onChange = { birth = it.birthYear; firstMode = it.mode.name; consent0 = it.consents[0]; consent1 = it.consents[1]; consent2 = it.consents[2] },
                     onStart = { starting = true; onStart(Mode.valueOf(firstMode)) })
                 Screen.Home -> if (mode == Mode.MAEUM) MaeumScreen(
-                    MaeumUi.from(engine.long, home, progress).copy(pastSelected = past, blueLink = blueLink),
-                    onLabels = { route = Screen.Labels.key }, onSettings = { route = Screen.Settings.key }, onCenter = ::openCenter, onTab = { past = it })
+                    MaeumUi.from(engine.long, home, progress, letter).copy(pastSelected = past, blueLink = blueLink),
+                    onLabels = { route = Screen.Labels.key }, onSettings = { route = Screen.Settings.key }, onCenter = ::openCenter, onTab = { past = it },
+                    onLetter = { route = Screen.Letter.key })
                 else ConditionScreen(ConditionUi.from(engine.condition, labels.keys, resets),
                     onLabels = { route = Screen.Labels.key }, onSettings = { route = Screen.Settings.key })
                 Screen.Labels -> LabelsScreen(LabelsUi(today, yesterday, labels[if (yesterday) today.minusDays(1) else today], busy),
@@ -164,7 +186,8 @@ fun Nav(graph: AppGraph, engine: EngineState, replay: ReplayViewModel, driving: 
                             graph.engineRunner.run(mode); refreshLocal()
                         }
                     }, onBack = ::back)
-                Screen.Settings -> SettingsScreen(SettingsUi(mode, presentation, home != null, deleteDialog, busy),
+                Screen.Settings -> SettingsScreen(SettingsUi(mode, presentation, home != null, deleteDialog, busy,
+                    pairing = pairing.copy(driverId = sync.driverId, lastSyncMs = sync.lastSyncMs)),
                     onMode = { selected -> action {
                         graph.setMode(selected); modeName = selected.name
                         DailyWorker.schedule(graph.context, selected)
@@ -188,11 +211,14 @@ fun Nav(graph: AppGraph, engine: EngineState, replay: ReplayViewModel, driving: 
                         home = null; progress = null; labels = emptyMap(); resets = emptyList(); past = false
                         deleteDialog = false; presentation = false; route = Screen.FirstRun.key
                         onDataCleared()
-                    } }, onBack = ::back)
+                    } }, onBack = ::back,
+                    onNewCode = { scope.launch { pairingController.newCode() } },
+                    onSync = { SyncWorker.enqueue(graph.context) })
                 Screen.Replay -> ReplayScreen(replayUi, replay::pause, { replay.end(); route = Screen.Settings.key }, ::openCenter)
                 Screen.Center -> CenterScreen(centerUi, { center ->
                     centerNavigator.request(center) { centerUi = centerUi.copy(routeMessage = it) }
                 }, ::back)
+                Screen.Letter -> LetterScreen(letter, ::back)
             }
         }
     }

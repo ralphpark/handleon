@@ -72,9 +72,11 @@ data class MaeumUi(
     val collectionText: String?, val homeHint: String?, val months: List<MonthResult>,
     val thresholds: Map<Domain, Double>, val baselineWindows: Map<FeatureId, BaselineWindow>,
     val pastSelected: Boolean = false, val blueLink: List<BlueLinkMonth> = emptyList(),
+    val letter: LetterUi? = null,
 ) {
+    val visibleLetter: LetterUi? get() = letter.takeUnless { pastSelected }
     companion object {
-        fun from(report: LongReport?, home: LatLon?, progress: CollectionProgress? = null): MaeumUi {
+        fun from(report: LongReport?, home: LatLon?, progress: CollectionProgress? = null, letter: LetterUi? = null): MaeumUi {
             val stage = report?.stage ?: Stage.BUILDING
             val last = report?.months?.lastOrNull()
             return MaeumUi(stage, Copy.stageTitle(stage), report?.onsetWeeksAgo?.let(Copy::onset),
@@ -83,7 +85,7 @@ data class MaeumUi(
                 ReasonUi.from(report?.top.orEmpty()), stage == Stage.TALK,
                 if (stage == Stage.BUILDING) progress?.let { "${it.months}개월 · ${it.trips}트립을 모았어요" } else null,
                 HOME_HINT.takeIf { home == null }, report?.months.orEmpty(), report?.thresholds.orEmpty(),
-                report?.baselineWindows.orEmpty())
+                report?.baselineWindows.orEmpty(), letter = letter)
         }
     }
 }
@@ -123,4 +125,4 @@ data class LabelsUi(val today: LocalDate, val yesterday: Boolean = false, val se
 }
 data class SettingsUi(val mode: Mode, val presentation: Boolean, val homeRegistered: Boolean,
                       val confirmDelete: Boolean = false, val busy: Boolean = false,
-                      val deletionAvailable: Boolean = COLLECTOR_ERASURE_AVAILABLE)
+                      val deletionAvailable: Boolean = COLLECTOR_ERASURE_AVAILABLE, val pairing: PairingUi = PairingUi())
