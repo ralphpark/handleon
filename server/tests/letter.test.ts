@@ -57,6 +57,17 @@ Deno.test("prompt carries no location keys even with extra runtime fields", () =
   assert(system.includes("핸들온 드림"));
   assertFalse(user.includes("W3"));
 });
+Deno.test("feature names follow the car engine's meaning", () => {
+  const { user } = buildPrompt({
+    month: "2026-10-01", mode: "maeum", stage: "talk",
+    top: [{ feature: "M7", direction: "down", grade: "A" }, { feature: "O1", direction: "up", grade: "A" }],
+  });
+  assertEquals(JSON.parse(user).changes.map((c: { activity: string }) => c.activity), [
+    "집에서 다녀오시는 거리",
+    "제한속도보다 빠르게 달린 시간",
+  ]);
+});
+
 Deno.test("request validator rejects location injection and invalid contracts", () => {
   for (
     const body of [
