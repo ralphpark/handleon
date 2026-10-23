@@ -13,3 +13,4 @@ server/.env.test
 .bkit/
 phone/android/app/google-services.json
 phone/ios/Runner/GoogleService-Info.plist
+server/supabase/.temp/
