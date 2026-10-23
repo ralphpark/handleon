@@ -24,6 +24,8 @@ class MyApp extends StatelessWidget {
       title: '핸들온',
       theme: lightTheme,
       darkTheme: darkTheme,
+      // 디자인 방향 '미드나잇': 야간 테마가 기본
+      themeMode: ThemeMode.dark,
       home: const Scaffold(body: Center(child: Text('핸들온'))),
     );
   }
