@@ -147,3 +147,10 @@ test("client timestamp cannot bypass upload delay and payload rejects location k
     )).error,
   );
 });
+
+Deno.test("users cannot change their own role", async () => {
+  const d = await newUser("driver");
+  const { error } = await d.client.from("profiles").update({ role: "family" }).eq("id", d.id);
+  assert(error);
+  ok(await d.client.from("profiles").update({ display_name: "새 이름" }).eq("id", d.id));
+});

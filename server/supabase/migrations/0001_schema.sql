@@ -128,7 +128,10 @@ alter table public.notification_queue enable row level security;
 
 revoke all on public.profiles, public.car_links, public.pairing_codes, public.monthly_summaries,
   public.daily_conditions, public.family_links, public.invites, public.push_tokens, public.notification_queue from anon, authenticated;
-grant select, insert, update, delete on public.profiles, public.push_tokens to authenticated;
+-- 역할(role)은 가입 때 한 번만 정한다: 프로필은 이름만 고칠 수 있다(가족이 운전자로 바꿔 RPC 를 쓰는 것을 막음).
+grant select, insert, delete on public.profiles to authenticated;
+grant update (display_name) on public.profiles to authenticated;
+grant select, insert, update, delete on public.push_tokens to authenticated;
 grant select on public.car_links to authenticated;
 grant select, insert, update on public.monthly_summaries, public.daily_conditions to authenticated;
 grant all on public.profiles, public.car_links, public.pairing_codes, public.monthly_summaries,
