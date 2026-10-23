@@ -49,6 +49,13 @@ class CentersTest {
         assertTrue(Centers.nearest(emptyList(), LatLon(37.41, 127.09)).isEmpty())
     }
 
+    @Test fun bundledPublicDataParsesEveryRow() {
+        val csv = java.io.File("src/main/assets/centers.csv").readText()
+        val centers = Centers.parse(csv)
+        assertEquals(csv.lines().count { it.isNotBlank() } - 1, centers.size)
+        assertEquals("분당구보건소 치매안심센터", Centers.nearest(centers, LatLon(37.3948, 127.1112), 1).single().first.name)
+    }
+
     @Test fun wrongHeaderIsRejected() {
         assertFailsWith<IllegalArgumentException> { Centers.parse("name,lon,lat\n가,127,37") }
     }
