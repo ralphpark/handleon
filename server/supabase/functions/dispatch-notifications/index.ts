@@ -2,13 +2,14 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import { dispatchOne } from "../_shared/dispatch.ts";
 import { createDispatchStore, pendingNotifications } from "../_shared/dispatch-store.ts";
 import { accessToken, sendMessage, serviceAccount } from "../_shared/fcm.ts";
+import { isServiceRoleBearer } from "../_shared/auth.ts";
 
 export async function handler(request: Request): Promise<Response> {
   if (request.method !== "POST") {
     return Response.json({ error: "method_not_allowed" }, { status: 405 });
   }
   const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-  if (!key || request.headers.get("authorization") !== `Bearer ${key}`) {
+  if (!key || !isServiceRoleBearer(request.headers.get("authorization"))) {
     return Response.json({ error: "unauthorized" }, { status: 401 });
   }
   try {
