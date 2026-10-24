@@ -34,7 +34,8 @@ class UploaderTest {
         assertEquals("2026-09-01", row["month"]!!.jsonPrimitive.content)
         assertEquals("talk", row["stage"]!!.jsonPrimitive.content)
         assertEquals("replay", row["source"]!!.jsonPrimitive.content)
-        assertEquals(2.0, row["domains"]!!.jsonObject["mobility"]!!.jsonPrimitive.double)
+        assertEquals(2.0, row["domains"]!!.jsonObject["mobility"]!!.jsonPrimitive.double)   // 2.0 ÷ 임계 1.0
+        assertEquals(1.5, row["domains"]!!.jsonObject["wayfinding"]!!.jsonPrimitive.double) // 3.0 ÷ 임계 2.0
         assertEquals("A", row["top"]!!.jsonArray[0].jsonObject["grade"]!!.jsonPrimitive.content)
     }
 
@@ -52,6 +53,8 @@ class UploaderTest {
         val report = longReport().copy(months = listOf(MonthResult(YearMonth.of(2026, 9),
             mapOf(Domain.MOBILITY to Double.NaN, Domain.WAYFINDING to Double.POSITIVE_INFINITY, Domain.OPERATION to 0.0), emptySet())))
         assertEquals(setOf("operation"), monthRow("driver", report, Mode.MAEUM, "car")!!["domains"]!!.jsonObject.keys)
+        val noThreshold = report.copy(thresholds = mapOf(Domain.OPERATION to 0.0))
+        assertEquals(JsonObject(emptyMap()), monthRow("driver", noThreshold, Mode.MAEUM, "car")!!["domains"])
     }
 
     @Test fun letterRequestSendsOnlyFeatureIds() = runTest {

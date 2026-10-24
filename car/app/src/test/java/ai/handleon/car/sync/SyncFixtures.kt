@@ -23,7 +23,8 @@ internal fun auth(access: String = "new-access", refresh: String = "new-refresh"
 internal fun longReport() = LongReport(Stage.TALK,
     listOf(MonthResult(YearMonth.of(2026, 8), mapOf(Domain.MOBILITY to 1.0), emptySet()),
         MonthResult(YearMonth.of(2026, 9), mapOf(Domain.MOBILITY to 2.0, Domain.WAYFINDING to 3.0), setOf(Domain.MOBILITY, Domain.WAYFINDING))),
-    emptyMap(), emptyMap(), listOf(Contribution(FeatureId.M1, -2.0, 2.0), Contribution(FeatureId.W3, 3.0, 0.9)), null)
+    mapOf(Domain.MOBILITY to 1.0, Domain.WAYFINDING to 2.0, Domain.OPERATION to 1.0), emptyMap(),
+    listOf(Contribution(FeatureId.M1, -2.0, 2.0), Contribution(FeatureId.W3, 3.0, 0.9)), null)
 
 internal class MemoryTrips : TripStore {
     val saved = mutableListOf<TripFeatures>()

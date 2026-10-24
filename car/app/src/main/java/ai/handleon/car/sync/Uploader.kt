@@ -16,8 +16,10 @@ fun monthRow(driverId: String, report: LongReport, mode: Mode, source: String): 
         put("driver_id", driverId); put("month", month.atDay(1).toString())
         put("mode", mode.name.lowercase(Locale.ROOT))
         put("stage", if (last == null) "building" else report.stage.name.lowercase(Locale.ROOT))
+        // 영역 지수 ÷ 개인 임계값: 1 을 넘으면 평소 범위 밖. 휴대폰은 임계값을 모르므로 비율로 보낸다.
         putJsonObject("domains") { last?.domains?.forEach { (domain, value) ->
-            if (value.isFinite()) put(domain.name.lowercase(Locale.ROOT), value)
+            val ratio = report.thresholds[domain]?.takeIf { it.isFinite() && it > 0 }?.let { value / it }
+            if (ratio != null && ratio.isFinite()) put(domain.name.lowercase(Locale.ROOT), Math.round(ratio * 1000) / 1000.0)
         } }
         putJsonArray("top") { if (last != null) report.top.take(3).forEach { c -> add(buildJsonObject {
             put("feature", c.feature.name); put("text", Copy.line(c)); put("grade", c.feature.grade.name)
