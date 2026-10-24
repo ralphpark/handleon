@@ -111,7 +111,7 @@ for (const scope of ["stage", "trend", "detail"] as const) {
     }
     assertEquals(
       Object.keys(r).sort(),
-      ["driver_id", "driver_name", "month", "stage", "domains", "top", "letter"].sort(),
+      ["driver_id", "driver_name", "month", "stage", "domains", "top", "letter", "scope"].sort(),
     );
   });
 }
@@ -198,4 +198,29 @@ test("letter save is service-only, rejects re-paired cars and stale summary vers
     (await admin.rpc("save_monthly_letter", params)).error?.message,
     "linked_car_required",
   );
+});
+test("driver sees own active shares with family names and feed carries scope", async () => {
+  const { driver, family } = await sharedPair("trend", 0);
+  const other = await newUser("driver");
+  const [share] = ok(await driver.client.rpc("get_my_shares"));
+  assertEquals([share.family_id, share.family_name, share.scope, share.delay_days], [family.id, "시험 사용자", "trend", 0]);
+  assertEquals(ok(await other.client.rpc("get_my_shares")), []);
+  assert((await family.client.rpc("get_my_shares")).error);
+  await seedMonth(driver.id);
+  assertEquals(ok(await family.client.rpc("get_family_feed"))[0].scope, "trend");
+  ok(await driver.client.rpc("revoke_share", { p_family_id: family.id }));
+  assertEquals(ok(await driver.client.rpc("get_my_shares")), []);
+});
+test("family previews an invite before accepting, never after or expired", async () => {
+  const driver = await newUser("driver");
+  const family = await newUser("family");
+  const code = ok(await driver.client.rpc("create_invite", { p_scope: "detail", p_delay_days: 7 }));
+  assert((await driver.client.rpc("preview_invite", { p_code: code })).error);
+  assertEquals(ok(await family.client.rpc("preview_invite", { p_code: code })),
+    [{ driver_name: "시험 사용자", scope: "detail", delay_days: 7 }]);
+  ok(await family.client.rpc("accept_invite", { p_code: code }));
+  assertEquals((await family.client.rpc("preview_invite", { p_code: code })).error?.message, "invalid_or_expired_code");
+  const late = ok(await driver.client.rpc("create_invite", { p_scope: "stage", p_delay_days: 0 }));
+  ok(await admin.from("invites").update({ expires_at: hoursAgo(1) }).eq("code", late));
+  assertEquals((await family.client.rpc("preview_invite", { p_code: late })).error?.message, "invalid_or_expired_code");
 });
