@@ -4,17 +4,19 @@
 원본 위치·트립은 요약 테이블에 저장하지 않습니다. 예외인 `imports` 파일은 연결된 차량이 받은 직후
 삭제해야 합니다.
 
-## 이번 작업 범위
+## 상태
 
-프로젝트 생성, 마이그레이션 적용, Edge 배포, 외부 API 호출, 실서버 시험은 수행하지 않았습니다. SQL과
-TypeScript, 순수 시험 및 추후 실행할 통합 시험을 작성했습니다. 실제 배포와 통합 확인은 Claude가
-담당합니다. 기존 `car/`, `phone/` 코드는 수정하지 않습니다.
+`0001`~`0007` 마이그레이션과 두 Edge Function 을 개발용 Supabase 프로젝트에 적용해 차량 앱·휴대폰 앱과 함께
+실서버로 확인했습니다(차 연결, 월 요약, 실제 Claude 월간 편지, 가족 공유·피드, FCM 푸시, 과거 기록 가져오기).
 
 ## 구성
 
 - `supabase/migrations/0001_schema.sql`: 데이터 계약, JSON 형식 검사, RLS, 서버 수신 시각.
 - `0002_rpc.sql`: 익명 차량 페어링, 가족 초대·공유 변경·철회·피드, 푸시 토큰.
-- `0003_notifications.sql`: 단계 변경 알림 큐와 10분 주기 cron.
+- `0003_notifications.sql`: 단계 변경 알림 큐와 발송 cron.
+- `0005_hardening.sql`: 보안 점검 반영.
+- `0006_phone_screens.sql`: 휴대폰 화면용 RPC(내 공유 목록, 초대 미리보기, 피드의 공유 범위).
+- `0007_dispatch_every_minute.sql`: 발송 cron 을 1분마다(“바로 공유”가 1분 안에 도착).
 - `0004_storage.sql`: 비공개 JSON 5 MB `imports` 버킷과 폴더별 정책.
 - `supabase/functions/monthly-letter/index.ts`: 차량 인증 → 편지 생성 → 해당 운전자의 월 요약 저장.
 - `supabase/functions/dispatch-notifications/index.ts`: 서비스 롤 인증 → 큐 조회 → 현재 동의 재확인
@@ -44,10 +46,10 @@ fetch로 대체합니다. 편지 제한 시간 시험은 실제로 약 20초 걸
 최종 오프라인 결과: **23개 통과, 0개 실패**(편지 10개, FCM·dispatch 13개), 모든 함수·실서버 시험을
 포함한 **14개 TypeScript 파일의 `deno check` 오류 0개**.
 
-## Claude의 실제 프로젝트 적용 순서
+## 새 프로젝트에 적용하는 순서
 
 1. 승인된 개발용 Supabase 프로젝트에서 익명 로그인 활성화, 이메일 로그인 설정 확인. `0001`부터
-   `0004`까지 순서대로 적용합니다. **아래 SQL 전제와 RLS를 실서버에서 먼저 확인합니다.**
+   `0007`까지 순서대로 적용합니다. **아래 SQL 전제와 RLS를 실서버에서 먼저 확인합니다.**
 2. 로컬 `server/.env.test`에 `.env.test.example`의 세 이름에 대응하는 값을 직접 설정합니다. 이
    파일은 저장소 루트 `.gitignore`에서 이미 제외됩니다. 파일·토큰 내용을 로그에 출력하지 않습니다.
 3. Vault `vault.decrypted_secrets`에 `service_role_key`, `project_url` 이름의 비밀값이 각각 하나씩

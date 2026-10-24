@@ -49,13 +49,23 @@ class CollectorService : Service() {
     private lateinit var location: LocationSignals
     private lateinit var navi: NaviSignals
     private val checkpoint by lazy { File(filesDir, "segmenter.json") }
+    private var started = false
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
         super.onCreate()
+        // 부팅·시스템 재시작처럼 앱이 화면에 없을 때 안드로이드 14 는 위치 포그라운드 서비스를 막는다
+        // (SecurityException, ForegroundServiceStartNotAllowedException). 죽지 말고 멈춘다. 앱이 화면에 뜨면 MainActivity 가 다시 시작한다.
+        try {
+            startForeground(NOTIFICATION_ID, notification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
+        } catch (e: Exception) {
+            Log.w(TAG, "지금은 수집을 시작할 수 없어 멈춤: ${e.javaClass.simpleName}")
+            stopSelf()
+            return
+        }
+        started = true
         running.value = true
-        startForeground(NOTIFICATION_ID, notification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
         runCatching { if (checkpoint.exists()) segmenter.restore(checkpoint.readText()) }
             .onFailure { Log.w(TAG, "체크포인트 복원 실패, 새로 시작: $it"); checkpoint.delete() }
         vehicle = VehicleSignals(this, signals).also { it.start() }
@@ -65,9 +75,12 @@ class CollectorService : Service() {
         scope.launch { tickLoop() }
     }
 
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_STICKY
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int =
+        if (started) START_STICKY else START_NOT_STICKY
 
     override fun onDestroy() {
+        // 시작하지 못했으면 신호도 체크포인트도 건드리지 않는다(진행 중 트립 파일을 지우면 안 된다).
+        if (!started) { super.onDestroy(); return }
         scope.cancel()
         listOf(vehicle::stop, car::stop, location::stop, navi::stop).forEach { runCatching { it() } }
         try {

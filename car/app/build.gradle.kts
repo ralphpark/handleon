@@ -14,6 +14,11 @@ val serverProperties = Properties().apply {
 }
 fun configString(value: String): String = "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"")
     .replace("\n", "\\n").replace("\r", "\\r") + "\""
+// 서명 키는 저장소 밖에 두고 keystore.properties(git 제외)로만 가리킨다. 없으면 release 는 서명 없이 빌드된다.
+val signing = Properties().apply {
+    val file = rootProject.file("keystore.properties")
+    if (file.exists()) file.inputStream().use { load(it) }
+}
 
 android {
     namespace = "ai.handleon.car"
@@ -31,8 +36,18 @@ android {
         buildConfigField("String", "SUPABASE_ANON_KEY", configString(serverProperties.getProperty("SUPABASE_ANON_KEY", "")))
     }
 
+    signingConfigs {
+        if (signing.containsKey("storeFile")) create("release") {
+            storeFile = file(signing.getProperty("storeFile"))
+            storePassword = signing.getProperty("storePassword")
+            keyAlias = signing.getProperty("keyAlias")
+            keyPassword = signing.getProperty("keyPassword")
+        }
+    }
+
     buildTypes {
         release {
+            signingConfigs.findByName("release")?.let { signingConfig = it }
             isMinifyEnabled = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
