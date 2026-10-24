@@ -40,6 +40,8 @@ class AppGraph(val context: Context) {
     private val prefs by lazy { context.getSharedPreferences("handleon", Context.MODE_PRIVATE) }
     private val setupState = MutableStateFlow(firstRunComplete())
     val setupCompleted = setupState.asStateFlow()
+    private val presentationState = MutableStateFlow(presentation())
+    val presentationEnabled = presentationState.asStateFlow()
     @Volatile var erasingData = false
 
     /** 첫 실행 화면(T8)에서 출생 연도로 고른 모드. 고르기 전에는 마음 운전. */
@@ -52,9 +54,13 @@ class AppGraph(val context: Context) {
         setupState.value = complete
     }
     fun presentation(): Boolean = prefs.getBoolean("presentation", false)
-    fun setPresentation(enabled: Boolean) = prefs.edit().putBoolean("presentation", enabled).apply()
+    fun setPresentation(enabled: Boolean) {
+        prefs.edit().putBoolean("presentation", enabled).apply()
+        presentationState.value = enabled
+    }
     fun clearUiPreferences() {
         prefs.edit().remove("first_run_complete").remove("mode").remove("presentation").apply()
         setupState.value = false
+        presentationState.value = false
     }
 }

@@ -22,6 +22,7 @@ import android.os.IBinder
 import android.util.Log
 import java.io.File
 import java.time.ZoneId
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -77,6 +78,7 @@ class CollectorService : Service() {
             }
             checkpoint.delete()
         } finally {
+            liveState.value = null
             running.value = false
             super.onDestroy()
         }
@@ -85,18 +87,39 @@ class CollectorService : Service() {
     private suspend fun tickLoop() {
         var lastTick = 0L
         var n = 0
+        var liveEvents = LiveEvents()
+        val graph = (application as HandleOnApp).graph
         while (scope.isActive) {
             val now = signals.now()
             val (naviEvents, telltales) = signals.drainEvents()
             naviEvents.forEach(segmenter::pushNavi)
             telltales.forEach(segmenter::pushTelltale)
-            val sample = SampleAssembler.toSample(now, signals.snapshot())
+            liveEvents = liveEvents.remember(naviEvents, telltales, now)
+            val snapshot = signals.snapshot()
+            val sample = SampleAssembler.toSample(now, snapshot)
             if (sample != null && sample.tMs != lastTick) {
                 lastTick = sample.tMs
                 segmenter.push(sample)?.let { save(it) }
                 if (DEBUG_LOG) Log.d(TAG, "샘플 $sample")
             }
             if (++n % 30 == 0) runCatching { checkpoint.writeText(segmenter.snapshot()) }
+            if (graph.presentation()) {
+                try {
+                    // current()·지표 계산 모두 이 틱에서만. 발표 모드 밖에서는 사본·DB 조회도 하지 않는다.
+                    val current = segmenter.current()
+                    val previous = liveState.value
+                    val refresh = LiveViewAssembler.needsTripUpdate(current, previous, now)
+                    val home = if (refresh) graph.tripRepository.home() else null
+                    val familiar = if (refresh) graph.tripRepository.familiarCells() else emptySet()
+                    liveState.value = LiveViewAssembler.from(graph.presentation(), snapshot, liveEvents, current, now, previous, home, familiar)
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (e: Exception) {
+                    // 시연 계산 실패가 기존 수집·저장을 멈추게 하지 않는다.
+                    liveState.value = null
+                    Log.w(TAG, "발표 화면 갱신 실패", e)
+                }
+            } else liveState.value = null
             delay(1000 - now % 1000)
         }
     }
@@ -124,6 +147,8 @@ class CollectorService : Service() {
     }
 
     companion object {
+        private val liveState = MutableStateFlow<LiveView?>(null)
+        val live: StateFlow<LiveView?> = liveState.asStateFlow()
         private val running = MutableStateFlow(false)
         /** 서비스가 살아 있는 동안 true. onDestroy 의 마지막 저장까지 끝나야 false. */
         val isRunning: StateFlow<Boolean> = running.asStateFlow()

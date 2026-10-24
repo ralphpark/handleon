@@ -36,12 +36,19 @@ sealed class Screen(val key: String) {
     data object Labels : Screen("labels")
     data object Settings : Screen("settings")
     data object Replay : Screen("replay")
+    data object DevEngine : Screen("dev-engine")
     data object Center : Screen("center")
     data object Letter : Screen("letter")
     companion object {
-        fun from(key: String): Screen = listOf(FirstRun, Home, Labels, Settings, Replay, Center, Letter).firstOrNull { it.key == key } ?: Home
+        fun from(key: String): Screen = listOf(FirstRun, Home, Labels, Settings, Replay, DevEngine, Center, Letter).firstOrNull { it.key == key } ?: Home
     }
 }
+
+fun presentationScreen(screen: Screen, presentation: Boolean): Screen =
+    if (screen == Screen.DevEngine && !presentation) Screen.Settings else screen
+
+fun showDrivingScreen(driving: Boolean, presentation: Boolean, screen: Screen): Boolean =
+    driving && !(presentation && screen == Screen.DevEngine)
 
 @Composable
 fun Nav(graph: AppGraph, engine: EngineState, replay: ReplayViewModel, driving: Boolean,
@@ -58,7 +65,7 @@ fun Nav(graph: AppGraph, engine: EngineState, replay: ReplayViewModel, driving: 
     var starting by rememberSaveable { mutableStateOf(false) }
     var past by rememberSaveable { mutableStateOf(false) }
     var yesterday by rememberSaveable { mutableStateOf(false) }
-    var presentation by rememberSaveable { mutableStateOf(graph.presentation()) }
+    val presentation by graph.presentationEnabled.collectAsStateWithLifecycle()
     var deleteDialog by rememberSaveable { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -77,7 +84,8 @@ fun Nav(graph: AppGraph, engine: EngineState, replay: ReplayViewModel, driving: 
     val centerNavigator = remember(graph) { CenterNavigator(graph.context) }
     val scope = rememberCoroutineScope()
     val mode = Mode.valueOf(modeName)
-    val screen = if (!onboarded) Screen.FirstRun else Screen.from(route)
+    val screen = if (!onboarded) Screen.FirstRun else presentationScreen(Screen.from(route), presentation)
+    val drivingScreen = showDrivingScreen(driving, presentation, screen)
     val replayUi by replay.state.collectAsStateWithLifecycle()
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val lifecycleState by lifecycle.currentStateFlow.collectAsStateWithLifecycle()
@@ -105,11 +113,15 @@ fun Nav(graph: AppGraph, engine: EngineState, replay: ReplayViewModel, driving: 
         route = when (screen) {
             Screen.Center -> centerReturn
             Screen.Replay -> { replay.end(); Screen.Settings.key }
+            Screen.DevEngine -> Screen.Settings.key
             else -> Screen.Home.key
         }
     }
     fun openCenter() { centerReturn = screen.key; route = Screen.Center.key }
 
+    LaunchedEffect(route, presentation) {
+        if (!presentation && Screen.from(route) == Screen.DevEngine) route = Screen.Settings.key
+    }
     LaunchedEffect(onboarded) {
         if (!onboarded) route = Screen.FirstRun.key
         if (onboarded && route == Screen.FirstRun.key) { route = Screen.Home.key; modeName = graph.mode().name }
@@ -157,9 +169,9 @@ fun Nav(graph: AppGraph, engine: EngineState, replay: ReplayViewModel, driving: 
     DisposableEffect(screen) {
         onDispose { centerNavigator.close() }
     }
-    BackHandler(driving || screen !in listOf(Screen.Home, Screen.FirstRun)) { if (!driving) back() }
+    BackHandler(drivingScreen || screen !in listOf(Screen.Home, Screen.FirstRun)) { if (!drivingScreen) back() }
 
-    if (driving) { DrivingScreen(); return }
+    if (drivingScreen) { DrivingScreen(); return }
     Column(Modifier.fillMaxSize().background(DarkTokens.surface)) {
         if (error != null) Text(error!!, Modifier.padding(24.dp), style = MaterialTheme.typography.bodySmall, color = DarkTokens.inkMuted)
         if (onboarded && !collectionAllowed && screen == Screen.Home) Row(Modifier.fillMaxWidth().padding(24.dp), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
@@ -193,7 +205,7 @@ fun Nav(graph: AppGraph, engine: EngineState, replay: ReplayViewModel, driving: 
                         DailyWorker.schedule(graph.context, selected)
                         graph.engineRunner.run(selected); refreshLocal()
                     } }, onReplay = { replay.start(graph.context, mode, restart = true); route = Screen.Replay.key },
-                    onPresentation = { presentation = it; graph.setPresentation(it) }, onDeleteDialog = { deleteDialog = it },
+                    onPresentation = graph::setPresentation, onDeleteDialog = { deleteDialog = it },
                     onDelete = { action {
                         replay.end()
                         graph.erasingData = true
@@ -209,12 +221,17 @@ fun Nav(graph: AppGraph, engine: EngineState, replay: ReplayViewModel, driving: 
                         } finally { graph.erasingData = false }
                         birth = ""; firstMode = Mode.CONDITION.name; consent0 = false; consent1 = false; consent2 = false
                         home = null; progress = null; labels = emptyMap(); resets = emptyList(); past = false
-                        deleteDialog = false; presentation = false; route = Screen.FirstRun.key
+                        deleteDialog = false; route = Screen.FirstRun.key
                         onDataCleared()
                     } }, onBack = ::back,
                     onNewCode = { scope.launch { pairingController.newCode() } },
-                    onSync = { SyncWorker.enqueue(graph.context) })
+                    onSync = { SyncWorker.enqueue(graph.context) },
+                    onDevEngine = { if (presentation) route = Screen.DevEngine.key })
                 Screen.Replay -> ReplayScreen(replayUi, replay::pause, { replay.end(); route = Screen.Settings.key }, ::openCenter)
+                Screen.DevEngine -> {
+                    val live by CollectorService.live.collectAsStateWithLifecycle()
+                    DevEngineScreen(DevEngineUi.from(live), ::back)
+                }
                 Screen.Center -> CenterScreen(centerUi, { center ->
                     centerNavigator.request(center) { centerUi = centerUi.copy(routeMessage = it) }
                 }, ::back)

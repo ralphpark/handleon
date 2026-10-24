@@ -17,14 +17,14 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun SettingsScreen(ui: SettingsUi, onMode: (Mode) -> Unit, onReplay: () -> Unit, onPresentation: (Boolean) -> Unit,
                    onDeleteDialog: (Boolean) -> Unit, onDelete: () -> Unit, onBack: () -> Unit,
-                   onNewCode: () -> Unit = {}, onSync: () -> Unit = {}) {
+                   onNewCode: () -> Unit = {}, onSync: () -> Unit = {}, onDevEngine: () -> Unit = {}) {
     ScreenFrame { wide ->
         PageHeader("설정", onBack)
         if (wide) Row(horizontalArrangement = Arrangement.spacedBy(28.dp)) {
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(16.dp)) { SettingsRows(ui, onMode, onReplay, onPresentation, onDeleteDialog) }
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(16.dp)) { SettingsRows(ui, onMode, onReplay, onPresentation, onDeleteDialog, onDevEngine) }
             GlassPanel(Modifier.weight(1.1f).heightIn(min = 580.dp), padding = 44.dp) { PairingScreen(ui.pairing, onNewCode, onSync) }
         } else {
-            SettingsRows(ui, onMode, onReplay, onPresentation, onDeleteDialog)
+            SettingsRows(ui, onMode, onReplay, onPresentation, onDeleteDialog, onDevEngine)
             GlassPanel(Modifier.fillMaxWidth()) { PairingScreen(ui.pairing, onNewCode, onSync) }
         }
     }
@@ -36,7 +36,7 @@ fun SettingsScreen(ui: SettingsUi, onMode: (Mode) -> Unit, onReplay: () -> Unit,
 }
 @Composable
 private fun SettingsRows(ui: SettingsUi, onMode: (Mode) -> Unit, onReplay: () -> Unit,
-                         onPresentation: (Boolean) -> Unit, onDeleteDialog: (Boolean) -> Unit) {
+                         onPresentation: (Boolean) -> Unit, onDeleteDialog: (Boolean) -> Unit, onDevEngine: () -> Unit) {
     GlassPanel(Modifier.fillMaxWidth()) {
         Text("모드", style = MaterialTheme.typography.titleMedium, color = DarkTokens.ink)
         Spacer(Modifier.height(16.dp))
@@ -54,6 +54,9 @@ private fun SettingsRows(ui: SettingsUi, onMode: (Mode) -> Unit, onReplay: () ->
             Text(if (ui.presentation) "켜짐" else "꺼짐", style = MaterialTheme.typography.labelLarge, color = DarkTokens.inkMuted)
             Switch(ui.presentation, onCheckedChange = null)
         }
+    }
+    if (ui.presentation) SettingRow("엔진 화면 열기", "Pleos 신호와 이번 트립 지표를 실시간으로 봐요") {
+        PillButton("열기", onDevEngine, kind = PillKind.SECONDARY, enabled = !ui.busy)
     }
     SettingRow("내 데이터 지우기", if (ui.deletionAvailable) "이 차에 모인 운전 지문과 라벨을 모두 지워요" else "데이터 삭제를 준비하고 있어요") {
         PillButton("지우기", { onDeleteDialog(true) }, kind = PillKind.SECONDARY, enabled = !ui.busy && ui.deletionAvailable)
