@@ -53,6 +53,14 @@ class TripSegmenter {
     fun pushTelltale(e: TelltaleOn) { telltales.add(e) }
     fun flush(): RawTrip? = close()
 
+    /** 진행 중인 트립의 사본(발표 모드 엔진 화면용). 상태를 바꾸지 않고, 길이·거리 조건도 따지지 않는다. */
+    fun current(): RawTrip? {
+        if (samples.isEmpty()) return null
+        val start = samples.first().tMs
+        return RawTrip(samples.toList(), navi.filter { it.tMs >= start }.sortedBy { it.tMs },
+            telltales.filter { it.tMs >= start }.sortedBy { it.tMs })
+    }
+
     private fun close(): RawTrip? {
         if (samples.isEmpty()) return null
         val start = samples.first().tMs

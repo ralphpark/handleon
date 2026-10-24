@@ -44,6 +44,18 @@ class TripSegmenterTest {
         List(seconds) { i -> Sample(startMs + i * 1000L, speedKmh, gear, false, null, null, null, null, null, null) }
     private fun feed(samples: List<Sample>) = samples.mapNotNull(seg::push)
 
+    @Test fun currentIsReadOnlyCopyOfTripInProgress() {
+        assertNull(seg.current())
+        feed(drive(0, 90, 40.0, D))
+        seg.pushNavi(TurnAhead(30_000, Signal.LEFT, 80.0))
+        val now = seg.current()!!
+        assertEquals(90, now.samples.size)
+        assertEquals(1, now.navi.size)
+        assertEquals(90, seg.current()!!.samples.size) // 사본을 만들어도 상태는 그대로
+        assertEquals(1, feed(drive(90_000, 31, 0.0, P)).size)
+        assertNull(seg.current())
+    }
+
     @Test fun parkDriveParkMakesOneTrip() {
         val trips = feed(drive(0, 10, 0.0, P) + drive(10_000, 600, 36.0, D) + drive(610_000, 40, 0.0, P))
         assertEquals(1, trips.size); assertEquals(6.0, trips[0].distanceKm(), 0.05)
