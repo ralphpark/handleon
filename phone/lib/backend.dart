@@ -102,9 +102,8 @@ Map<String, double>? _domains(Object? raw) => raw == null
     ? null
     : {
         for (final entry in (raw as Map).entries)
-          if (entry.value is num &&
-              (entry.value as num).isFinite &&
-              (entry.value as num) >= 0)
+          // 개인 임계값 대비 비율이라 0 보다 작아도 실제 값이다(평소보다 덜 달라짐).
+          if (entry.value is num && (entry.value as num).isFinite)
             entry.key as String: (entry.value as num).toDouble(),
       };
 List<TopItem>? _top(Object? raw) => raw == null

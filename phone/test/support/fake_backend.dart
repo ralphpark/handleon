@@ -25,6 +25,7 @@ class FakeBackend implements Backend {
   List<String> uploads = [];
   List<Share> shares = [];
   List<FeedRow> feed = [];
+  int feedCalls = 0;
   List<MonthRow> months = [];
   List<DayRow> days = [];
   bool linked = false;
@@ -135,6 +136,7 @@ class FakeBackend implements Backend {
   @override
   Future<List<FeedRow>> familyFeed() async {
     check();
+    feedCalls++;
     return List.of(feed);
   }
 

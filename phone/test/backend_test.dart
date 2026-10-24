@@ -48,6 +48,17 @@ void main() {
     expect(row.domains, isNull);
     expect(row.top, isNull);
     expect(row.letter, isNull);
+    final trend = FeedRow.fromJson({
+      'driver_id': 'd',
+      'driver_name': '아버지',
+      'month': '2026-10-01',
+      'stage': 'talk',
+      'scope': 'trend',
+      'domains': {'mobility': 1.132, 'operation': -0.022},
+      'top': null,
+      'letter': null,
+    });
+    expect(trend.domains, {'mobility': 1.132, 'operation': -0.022});
     expect(
       () => InvitePreview.fromJson({
         'driver_name': '아버지',

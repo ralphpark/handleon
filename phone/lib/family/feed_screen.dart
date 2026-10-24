@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../backend.dart';
@@ -8,8 +10,11 @@ const feedNotice =
     '새 요약은 운전하시는 분이 정한 시점이 지나면 보여요. 도착하면 "새 운전 요약이 도착했어요" 알림을 보내 드려요.';
 
 class FamilyHome extends StatefulWidget {
-  const FamilyHome({super.key, required this.backend});
+  const FamilyHome({super.key, required this.backend, this.arrivals});
   final Backend backend;
+
+  /// 앱이 열린 채로 새 요약 알림이 오면 피드를 다시 불러온다.
+  final Stream<void>? arrivals;
   @override
   State<FamilyHome> createState() => _FamilyHomeState();
 }
@@ -19,10 +24,18 @@ class _FamilyHomeState extends State<FamilyHome> {
   bool loading = true;
   String? error;
   int request = 0;
+  StreamSubscription<void>? arrivals;
   @override
   void initState() {
     super.initState();
+    arrivals = widget.arrivals?.listen((_) => load());
     load();
+  }
+
+  @override
+  void dispose() {
+    unawaited(arrivals?.cancel());
+    super.dispose();
   }
 
   Future<void> load() async {

@@ -14,21 +14,37 @@ import 'family/feed_screen.dart';
 import 'push.dart';
 import 'theme.dart';
 
+const arrivalNotice = '새 운전 요약이 도착했어요';
+
 class AppRouter extends StatefulWidget {
-  const AppRouter({super.key, required this.backend, this.initialRoute = '/'});
+  const AppRouter({
+    super.key,
+    required this.backend,
+    this.initialRoute = '/',
+    this.push,
+  });
   final Backend backend;
   final String initialRoute;
+  final Push? push; // 시험용
   @override
   State<AppRouter> createState() => _AppRouterState();
 }
 
 class _AppRouterState extends State<AppRouter> {
   StreamSubscription<void>? subscription;
+  StreamSubscription<void>? arrivals;
+  final messenger = GlobalKey<ScaffoldMessengerState>();
   late Push push;
   @override
   void initState() {
     super.initState();
-    push = Push(widget.backend);
+    push = widget.push ?? Push(widget.backend);
+    // 앱이 열려 있을 때는 안드로이드가 알림창에 띄우지 않으므로 앱 안에 알린다.
+    arrivals = push.arrivals.listen((_) {
+      messenger.currentState
+        ?..hideCurrentSnackBar()
+        ..showSnackBar(const SnackBar(content: Text(arrivalNotice)));
+    });
     unawaited(push.init());
     subscription = widget.backend.changes.listen((_) {
       if (mounted) {
@@ -41,6 +57,7 @@ class _AppRouterState extends State<AppRouter> {
   @override
   void dispose() {
     unawaited(subscription?.cancel());
+    unawaited(arrivals?.cancel());
     push.dispose();
     super.dispose();
   }
@@ -59,13 +76,14 @@ class _AppRouterState extends State<AppRouter> {
     }
     return switch (path) {
       '/family/accept' => AcceptScreen(backend: b),
-      _ => FamilyHome(backend: b),
+      _ => FamilyHome(backend: b, arrivals: push.arrivals),
     };
   }
 
   @override
   Widget build(BuildContext context) => MaterialApp(
     key: ValueKey('${widget.backend.userId}:${widget.backend.role}'),
+    scaffoldMessengerKey: messenger,
     title: '핸들온',
     theme: lightTheme,
     darkTheme: darkTheme,
