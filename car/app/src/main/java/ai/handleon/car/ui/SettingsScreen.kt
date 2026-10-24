@@ -17,14 +17,15 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun SettingsScreen(ui: SettingsUi, onMode: (Mode) -> Unit, onReplay: () -> Unit, onPresentation: (Boolean) -> Unit,
                    onDeleteDialog: (Boolean) -> Unit, onDelete: () -> Unit, onBack: () -> Unit,
-                   onNewCode: () -> Unit = {}, onSync: () -> Unit = {}, onDevEngine: () -> Unit = {}) {
+                   onNewCode: () -> Unit = {}, onSync: () -> Unit = {}, onDevEngine: () -> Unit = {},
+                   onAlwaysLocation: () -> Unit = {}) {
     ScreenFrame { wide ->
         PageHeader("설정", onBack)
         if (wide) Row(horizontalArrangement = Arrangement.spacedBy(28.dp)) {
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(16.dp)) { SettingsRows(ui, onMode, onReplay, onPresentation, onDeleteDialog, onDevEngine) }
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(16.dp)) { SettingsRows(ui, onMode, onReplay, onPresentation, onDeleteDialog, onDevEngine, onAlwaysLocation) }
             GlassPanel(Modifier.weight(1.1f).heightIn(min = 580.dp), padding = 44.dp) { PairingScreen(ui.pairing, onNewCode, onSync) }
         } else {
-            SettingsRows(ui, onMode, onReplay, onPresentation, onDeleteDialog, onDevEngine)
+            SettingsRows(ui, onMode, onReplay, onPresentation, onDeleteDialog, onDevEngine, onAlwaysLocation)
             GlassPanel(Modifier.fillMaxWidth()) { PairingScreen(ui.pairing, onNewCode, onSync) }
         }
     }
@@ -36,13 +37,20 @@ fun SettingsScreen(ui: SettingsUi, onMode: (Mode) -> Unit, onReplay: () -> Unit,
 }
 @Composable
 private fun SettingsRows(ui: SettingsUi, onMode: (Mode) -> Unit, onReplay: () -> Unit,
-                         onPresentation: (Boolean) -> Unit, onDeleteDialog: (Boolean) -> Unit, onDevEngine: () -> Unit) {
+                         onPresentation: (Boolean) -> Unit, onDeleteDialog: (Boolean) -> Unit, onDevEngine: () -> Unit,
+                         onAlwaysLocation: () -> Unit) {
     GlassPanel(Modifier.fillMaxWidth()) {
         Text("모드", style = MaterialTheme.typography.titleMedium, color = DarkTokens.ink)
         Spacer(Modifier.height(16.dp))
         ModeChoices(ui.mode, onMode, !ui.busy)
     }
     SettingRow("휴대폰 연결", if (ui.pairing.driverId == null) "연결된 휴대폰 없음" else "휴대폰과 연결됐어요") {}
+    // 위치가 '항상 허용'이어야 앱을 열지 않아도 시동 직후부터 모을 수 있다(안드로이드 14 백그라운드 제한).
+    SettingRow("시동 직후부터 모으기", if (ui.alwaysLocation) "앱을 열지 않아도 시동을 걸면 바로 모아요"
+        else "위치를 '항상 허용'으로 바꾸면 앱을 열지 않아도 모아요") {
+        if (ui.alwaysLocation) Text("켜짐", style = MaterialTheme.typography.labelLarge, color = DarkTokens.brand)
+        else PillButton("켜기", onAlwaysLocation, kind = PillKind.SECONDARY, enabled = !ui.busy)
+    }
     SettingRow("집 위치", if (ui.homeRegistered) "내비 즐겨찾기 '집'에서 가져왔어요" else "내비 즐겨찾기에 집을 등록해 주세요") {
         Text(if (ui.homeRegistered) "등록됨" else "미등록", style = MaterialTheme.typography.labelLarge, color = if (ui.homeRegistered) DarkTokens.brand else DarkTokens.inkMuted)
     }

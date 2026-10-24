@@ -32,14 +32,20 @@ class MainActivity : ComponentActivity() {
     private var driving by mutableStateOf(false)
     private var car: Car? = null
     private var ux: CarUxRestrictionsManager? = null
+    private var alwaysLocation by mutableStateOf(false)
     private val permissions = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
         finishOnboarding()
+    }
+    // 안드로이드 11+ 는 '항상 허용'을 따로, 앱 사용 중 위치를 받은 뒤에만 물을 수 있다(시스템이 설정 화면을 연다).
+    private val backgroundLocation = registerForActivityResult(ActivityResultContracts.RequestPermission()) {
+        alwaysLocation = hasBackgroundLocation()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val onboarded = graph.firstRunComplete()
         collectionAllowed = hasLocationPermission()
+        alwaysLocation = hasBackgroundLocation()
         enableBootCollection(onboarded && collectionAllowed && !graph.erasingData)
         if (!graph.erasingData) {
             if (onboarded && collectionAllowed) CollectorService.start(this)
@@ -54,7 +60,8 @@ class MainActivity : ComponentActivity() {
                 Nav(graph, engine, replay, driving, onboarded, collectionAllowed,
                     onStart = { mode -> graph.setMode(mode); permissions.launch(RUNTIME_PERMISSIONS) },
                     onRequestPermissions = { permissions.launch(RUNTIME_PERMISSIONS) },
-                    onDataCleared = { enableBootCollection(false) })
+                    onDataCleared = { enableBootCollection(false) },
+                    alwaysLocation = alwaysLocation, onAlwaysLocation = ::requestAlwaysLocation)
             }
         }
     }
@@ -68,8 +75,23 @@ class MainActivity : ComponentActivity() {
             // A location foreground service cannot start without location permission on Android 14+.
             if (collectionAllowed) CollectorService.start(this@MainActivity)
             DailyWorker.schedule(this@MainActivity, graph.mode())
+            // 첫 실행의 마지막 단계: 시동 직후부터 모으려면 '항상 허용'. 거절해도 앱을 열 때부터는 모은다.
+            requestAlwaysLocation()
         }
     }
+
+    private fun requestAlwaysLocation() {
+        if (hasLocationPermission() && !hasBackgroundLocation()) backgroundLocation.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // 설정 앱에서 바꾸고 돌아온 경우
+        alwaysLocation = hasBackgroundLocation()
+    }
+
+    private fun hasBackgroundLocation() =
+        checkSelfPermission(Manifest.permission.ACCESS_BACKGROUND_LOCATION) == PackageManager.PERMISSION_GRANTED
 
     private suspend fun runEngine(mode: Mode) {
         try { graph.engineRunner.run(mode) }

@@ -53,7 +53,8 @@ fun showDrivingScreen(driving: Boolean, presentation: Boolean, screen: Screen): 
 @Composable
 fun Nav(graph: AppGraph, engine: EngineState, replay: ReplayViewModel, driving: Boolean,
         onboarded: Boolean, collectionAllowed: Boolean, onStart: (Mode) -> Unit,
-        onRequestPermissions: () -> Unit, onDataCleared: () -> Unit) {
+        onRequestPermissions: () -> Unit, onDataCleared: () -> Unit,
+        alwaysLocation: Boolean = false, onAlwaysLocation: () -> Unit = {}) {
     var route by rememberSaveable { mutableStateOf(if (onboarded) Screen.Home.key else Screen.FirstRun.key) }
     var centerReturn by rememberSaveable { mutableStateOf(Screen.Home.key) }
     var modeName by rememberSaveable { mutableStateOf(graph.mode().name) }
@@ -199,13 +200,15 @@ fun Nav(graph: AppGraph, engine: EngineState, replay: ReplayViewModel, driving: 
                         }
                     }, onBack = ::back)
                 Screen.Settings -> SettingsScreen(SettingsUi(mode, presentation, home != null, deleteDialog, busy,
-                    pairing = pairing.copy(driverId = sync.driverId, lastSyncMs = sync.lastSyncMs, presentation = presentation)),
+                    pairing = pairing.copy(driverId = sync.driverId, lastSyncMs = sync.lastSyncMs, presentation = presentation),
+                    alwaysLocation = alwaysLocation),
                     onMode = { selected -> action {
                         graph.setMode(selected); modeName = selected.name
                         DailyWorker.schedule(graph.context, selected)
                         graph.engineRunner.run(selected); refreshLocal()
                     } }, onReplay = { replay.start(graph.context, mode, restart = true); route = Screen.Replay.key },
                     onPresentation = graph::setPresentation, onDeleteDialog = { deleteDialog = it },
+                    onAlwaysLocation = onAlwaysLocation,
                     onDelete = { action {
                         replay.end()
                         graph.erasingData = true
