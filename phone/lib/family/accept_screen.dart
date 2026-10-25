@@ -115,6 +115,9 @@ class _AcceptScreenState extends State<AcceptScreen> {
                     : '요약이 나오고 ${preview!.timing.wire}일 뒤',
               ),
               const Divider(height: 1),
+              Text(
+                preview!.sharePattern ? '운전 패턴도 함께 보여 줘요' : '운전 패턴은 보여 주지 않아요',
+              ),
               Muted(
                 '위치는 공유되지 않아요. 보여 줄 범위와 시점은 ${preview!.driverName} 님이 정하고 언제든 바꿀 수 있어요.',
               ),

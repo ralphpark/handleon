@@ -4,6 +4,7 @@ import ai.handleon.car.engine.Mode
 import ai.handleon.driveprint.ConditionReport
 import ai.handleon.driveprint.Copy
 import ai.handleon.driveprint.LongReport
+import ai.handleon.driveprint.PatternMonth
 import java.util.Locale
 import kotlinx.coroutines.CancellationException
 import kotlinx.serialization.json.*
@@ -39,6 +40,20 @@ fun dayRows(driverId: String, report: ConditionReport): JsonArray = buildJsonArr
     }
 }
 
+fun patternRows(driverId: String, months: List<PatternMonth>, source: String): JsonArray {
+    require(source == "car" || source == "replay")
+    return buildJsonArray { months.forEach { month -> add(buildJsonObject {
+        put("driver_id", driverId); put("month", month.month.atDay(1).toString())
+        put("partial", month.partial); put("trips", month.trips)
+        put("drive_minutes", month.driveMinutes); put("drive_days", month.driveDays)
+        put("night_ratio", month.nightRatio); put("long_ratio", month.longRatio)
+        put("radius_ratio", month.radiusRatio); put("places_ratio", month.placesRatio)
+        put("usual_trips", month.usualTrips); put("usual_minutes", month.usualMinutes)
+        put("usual_night_ratio", month.usualNightRatio); put("usual_long_ratio", month.usualLongRatio)
+        put("source", source)
+    }) } }
+}
+
 fun letterBody(row: JsonObject, report: LongReport): JsonObject = buildJsonObject {
     listOf("month", "mode", "stage").forEach { put(it, row.getValue(it)) }
     putJsonArray("top") {
@@ -49,6 +64,10 @@ fun letterBody(row: JsonObject, report: LongReport): JsonObject = buildJsonObjec
 }
 
 class Uploader(private val client: SupabaseClient) {
+    suspend fun uploadPatterns(driverId: String, months: List<PatternMonth>, source: String) {
+        val rows = patternRows(driverId, months, source)
+        if (rows.isNotEmpty()) client.upsert("monthly_patterns", rows, "driver_id,month")
+    }
     suspend fun upload(driverId: String, report: LongReport, mode: Mode, source: String): JsonObject? {
         val row = monthRow(driverId, report, mode, source) ?: return null
         client.upsert("monthly_summaries", JsonArray(listOf(row)), "driver_id,month")

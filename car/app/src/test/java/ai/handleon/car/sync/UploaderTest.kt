@@ -15,6 +15,25 @@ class UploaderTest {
     private val server = MockWebServer()
     @After fun close() = server.shutdown()
 
+    @Test fun patternRowHasOnlyAggregateKeys() = runTest {
+        val month = PatternMonth(YearMonth.of(2026, 10), true, 3, 61, 2,
+            0.333, 0.333, null, null, null, null, null, null)
+        val row = patternRows("driver", listOf(month), "car").single().jsonObject
+        // The provided contract enumerates 15 keys (despite saying 16).
+        assertEquals(setOf("driver_id", "month", "partial", "trips", "drive_minutes", "drive_days", "night_ratio",
+            "long_ratio", "radius_ratio", "places_ratio", "usual_trips", "usual_minutes", "usual_night_ratio", "usual_long_ratio", "source"), row.keys)
+        // 'long_ratio' is explicitly allowed; 'lon' as a coordinate key is not.
+        assertTrue(row.keys.none { key -> key in setOf("lat", "lon") || listOf("latitude", "longitude", "cell", "home", "km").any { it in key } })
+        for (key in listOf("radius_ratio", "places_ratio", "usual_trips", "usual_minutes", "usual_night_ratio", "usual_long_ratio")) assertEquals(JsonNull, row[key])
+        assertEquals("2026-10-01", row["month"]!!.jsonPrimitive.content)
+        server.reply("", 201)
+        Uploader(server.client()).uploadPatterns("driver", listOf(month), "car")
+        val request = server.takeRequest()
+        assertEquals("/rest/v1/monthly_patterns", request.requestUrl!!.encodedPath)
+        assertEquals("driver_id,month", request.requestUrl!!.queryParameter("on_conflict"))
+        assertEquals(row, Json.parseToJsonElement(request.body.readUtf8()).jsonArray.single())
+    }
+
     @Test fun monthUploadHasNoLocation() = runTest {
         server.reply("", 201)
         Uploader(server.client()).upload("driver", longReport(), Mode.MAEUM, "car")

@@ -18,14 +18,21 @@ import androidx.compose.ui.unit.dp
 fun SettingsScreen(ui: SettingsUi, onMode: (Mode) -> Unit, onReplay: () -> Unit, onPresentation: (Boolean) -> Unit,
                    onDeleteDialog: (Boolean) -> Unit, onDelete: () -> Unit, onBack: () -> Unit,
                    onNewCode: () -> Unit = {}, onSync: () -> Unit = {}, onDevEngine: () -> Unit = {},
-                   onAlwaysLocation: () -> Unit = {}) {
+                   onAlwaysLocation: () -> Unit = {}, onSharingToggle: () -> Unit = {},
+                   onRevokeDialog: (Boolean) -> Unit = {}, onRevoke: () -> Unit = {}) {
     ScreenFrame { wide ->
         PageHeader("설정", onBack)
         if (wide) Row(horizontalArrangement = Arrangement.spacedBy(28.dp)) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(16.dp)) { SettingsRows(ui, onMode, onReplay, onPresentation, onDeleteDialog, onDevEngine, onAlwaysLocation) }
-            GlassPanel(Modifier.weight(1.1f).heightIn(min = 580.dp), padding = 44.dp) { PairingScreen(ui.pairing, onNewCode, onSync) }
+            Column(Modifier.weight(1.1f), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                if (ui.pairing.driverId != null) SharingPanel(ui.sharing, ui.sharingBusy, ui.sharingError, ui.confirmRevoke,
+                    onSharingToggle, onRevokeDialog, onRevoke)
+                GlassPanel(Modifier.fillMaxWidth(), padding = 44.dp) { PairingScreen(ui.pairing, onNewCode, onSync) }
+            }
         } else {
             SettingsRows(ui, onMode, onReplay, onPresentation, onDeleteDialog, onDevEngine, onAlwaysLocation)
+            if (ui.pairing.driverId != null) SharingPanel(ui.sharing, ui.sharingBusy, ui.sharingError, ui.confirmRevoke,
+                onSharingToggle, onRevokeDialog, onRevoke)
             GlassPanel(Modifier.fillMaxWidth()) { PairingScreen(ui.pairing, onNewCode, onSync) }
         }
     }

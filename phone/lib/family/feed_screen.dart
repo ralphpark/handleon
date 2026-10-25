@@ -4,7 +4,8 @@ import 'package:flutter/material.dart';
 
 import '../backend.dart';
 import '../ui.dart';
-import 'summary_card.dart';
+import 'family_content.dart';
+import 'note_screen.dart';
 
 const feedNotice =
     '새 요약은 운전하시는 분이 정한 시점이 지나면 보여요. 도착하면 "새 운전 요약이 도착했어요" 알림을 보내 드려요.';
@@ -21,20 +22,26 @@ class FamilyHome extends StatefulWidget {
 
 class _FamilyHomeState extends State<FamilyHome> {
   List<FeedRow> rows = [];
+  List<FamilyLink> links = [];
+  List<PatternRow> patterns = [];
   bool loading = true;
   String? error;
   int request = 0;
   StreamSubscription<void>? arrivals;
+  // 백그라운드에서 알림을 눌러 돌아오거나 다른 앱에서 돌아오면 새로 불러온다(앞에 있을 때 온 푸시만으로는 부족하다).
+  late final AppLifecycleListener lifecycle;
   @override
   void initState() {
     super.initState();
     arrivals = widget.arrivals?.listen((_) => load());
+    lifecycle = AppLifecycleListener(onResume: load);
     load();
   }
 
   @override
   void dispose() {
     unawaited(arrivals?.cancel());
+    lifecycle.dispose();
     super.dispose();
   }
 
@@ -43,23 +50,22 @@ class _FamilyHomeState extends State<FamilyHome> {
     setState(() {
       loading = true;
       rows = [];
+      links = [];
+      patterns = [];
       error = null;
     });
     try {
-      final result = await widget.backend.familyFeed();
-      final latest = <String, FeedRow>{};
-      for (final row in result) {
-        if (!latest.containsKey(row.driverId) ||
-            row.month.isAfter(latest[row.driverId]!.month)) {
-          latest[row.driverId] = row;
-        }
-      }
+      final result = await Future.wait<Object>([
+        widget.backend.familyLinks(),
+        widget.backend.familyFeed(),
+        widget.backend.familyPatterns(),
+      ]);
       if (mounted && current == request) {
-        setState(
-          () =>
-              rows = latest.values.toList()
-                ..sort((a, b) => b.month.compareTo(a.month)),
-        );
+        setState(() {
+          links = result[0] as List<FamilyLink>;
+          rows = result[1] as List<FeedRow>;
+          patterns = result[2] as List<PatternRow>;
+        });
       }
     } catch (e) {
       if (mounted && current == request) {
@@ -94,8 +100,35 @@ class _FamilyHomeState extends State<FamilyHome> {
         Notice(error!),
         SecondaryButton('다시 불러오기', onPressed: load),
       ],
-      for (final row in rows)
-        SummaryCard(key: ValueKey(row.driverId), row: row),
+      for (final link in links)
+        Column(
+          key: ValueKey(link.driverId),
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: spaced([
+            SectionTitle('${link.driverName} 님'),
+            FamilyContent(
+              driverName: link.driverName,
+              paused: link.paused,
+              sharePattern: link.sharePattern,
+              feed: rows.where((r) => r.driverId == link.driverId).toList(),
+              patterns: patterns
+                  .where((r) => r.driverId == link.driverId)
+                  .toList(),
+            ),
+            SecondaryButton(
+              '한마디 보내기',
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => NoteScreen(
+                    backend: widget.backend,
+                    driverId: link.driverId,
+                    driverName: link.driverName,
+                  ),
+                ),
+              ),
+            ),
+          ], 16),
+        ),
       if (!loading && error == null) const Notice(feedNotice),
       PrimaryButton('초대 받기', onPressed: accept),
       const Text(disclaimer, textAlign: TextAlign.center),

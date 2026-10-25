@@ -44,6 +44,7 @@ class CollectorService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val signals = LatestSignals()
     private val segmenter = TripSegmenter()
+    private val session = DriveSession()
     private lateinit var vehicle: VehicleSignals
     private lateinit var car: CarSignals
     private lateinit var location: LocationSignals
@@ -110,6 +111,8 @@ class CollectorService : Service() {
             liveEvents = liveEvents.remember(naviEvents, telltales, now)
             val snapshot = signals.snapshot()
             val sample = SampleAssembler.toSample(now, snapshot)
+            session.update(now, moving = (sample?.speedKmh ?: 0.0) > 3.0)
+            if (sessionState.value != session.view) sessionState.value = session.view
             if (sample != null && sample.tMs != lastTick) {
                 lastTick = sample.tMs
                 segmenter.push(sample)?.let { save(it) }
@@ -160,6 +163,8 @@ class CollectorService : Service() {
     }
 
     companion object {
+        private val sessionState = MutableStateFlow<DriveSessionView?>(null)
+        val driveSession: StateFlow<DriveSessionView?> = sessionState.asStateFlow()
         private val liveState = MutableStateFlow<LiveView?>(null)
         val live: StateFlow<LiveView?> = liveState.asStateFlow()
         private val running = MutableStateFlow(false)

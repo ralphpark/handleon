@@ -14,22 +14,55 @@ import androidx.compose.ui.unit.dp
 
 @Composable
 fun MaeumScreen(ui: MaeumUi, onLabels: () -> Unit = {}, onSettings: () -> Unit = {},
-                onCenter: () -> Unit = {}, onTab: (Boolean) -> Unit = {}, onLetter: () -> Unit = {}) {
-    ScreenFrame(talk = ui.showCenter, notice = true, footer = { wide ->
+                onCenter: () -> Unit = {}, onTab: (Boolean) -> Unit = {}, onLetter: () -> Unit = {},
+                headerExtra: @Composable RowScope.() -> Unit = {}, homeCard: @Composable () -> Unit = {},
+                compactHome: Boolean = false) {
+    ScreenFrame(talk = ui.showCenter, notice = true, compact = compactHome, footer = { wide ->
         if (ui.showCenter && !ui.pastSelected) {
             if (wide) CenterBanner(onCenter, true)
             else PillButton("가까운 곳 보기", onCenter, Modifier.fillMaxWidth(), PillKind.CORAL, icon = MidnightIcons.Next)
         }
     }) { wide ->
         HomeHeader("마음 운전", ui.period, onLabels, onSettings) {
+            headerExtra()
             if (wide) SegmentedControl(if (ui.pastSelected) 1 else 0, { onTab(it == 1) })
         }
+        homeCard()
         if (!wide) SegmentedControl(if (ui.pastSelected) 1 else 0, { onTab(it == 1) })
         if (ui.pastSelected) {
             GlassPanel(Modifier.fillMaxWidth(), padding = 32.dp) { TrendChart(ui.months, ui.thresholds, ui.baselineWindows) }
             ReplayNotice(BlueLinkMock.NOTICE)
             GlassPanel(Modifier.fillMaxWidth(), padding = 32.dp) { DistanceChart(ui.blueLink) }
-        } else MaeumContent(ui, wide, onLetter)
+        } else if (compactHome && wide) CompactMaeumContent(ui, onLetter)
+        else MaeumContent(ui, wide, onLetter)
+    }
+}
+
+/** A short parked card leaves the center footer and the current report visible at 1920 × 720. */
+@Composable
+private fun CompactMaeumContent(ui: MaeumUi, onLetter: () -> Unit) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+        GlassPanel(Modifier.weight(1f), padding = 20.dp) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                RingGauge(ui.rings, compact = true, diameter = 180.dp)
+                Column(Modifier.weight(1f)) {
+                    HeroCopy(ui, true)
+                    ui.collectionText?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = DarkTokens.brand) }
+                    ui.homeHint?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = DarkTokens.inkMuted) }
+                }
+            }
+        }
+        GlassPanel(Modifier.weight(1f), padding = 20.dp) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text("평소와 달라진 점", style = MaterialTheme.typography.titleSmall, color = DarkTokens.threshold)
+                ui.visibleLetter?.let { PillButton("이번 달 편지 보기", onLetter, kind = PillKind.SECONDARY) }
+            }
+            if (ui.reasons.isEmpty()) Text("새로 알려 드릴 변화가 없어요.", style = MaterialTheme.typography.bodyMedium, color = DarkTokens.inkMuted)
+            ui.reasons.forEach {
+                Text(it.line, style = MaterialTheme.typography.bodySmall, color = DarkTokens.ink)
+                Text(it.evidence, style = MaterialTheme.typography.bodySmall, color = DarkTokens.inkMuted)
+            }
+        }
     }
 }
 

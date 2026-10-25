@@ -7,7 +7,7 @@ import 'support/fake_backend.dart';
 import 'support/harness.dart';
 
 void main() {
-  testWidgets('seven choices unselected; needs both; chosen arguments', (
+  testWidgets('nine choices unselected; needs all three; chosen arguments', (
     t,
   ) async {
     final b = FakeBackend();
@@ -36,9 +36,40 @@ void main() {
       isNull,
     );
     await tapText(t, '7일 뒤 공유');
-    await tapText(t, '초대 만들기');
-    expect(b.invited, (ShareScope.trend, ShareTiming.d7));
+    expect(
+      t.widget<RadioGroup<bool>>(find.byType(RadioGroup<bool>)).groupValue,
+      isNull,
+    );
+    expect(
+      t.widget<FilledButton>(find.byKey(const Key('createInvite'))).onPressed,
+      isNull,
+    );
+    await tapText(t, '함께 보여 주기');
+    await tapText(t, '초대 코드 만들기');
+    expect(b.invited, (ShareScope.trend, ShareTiming.d7, true));
     expect(find.text('K7Q2M9XD'), findsOneWidget);
     expect(find.textContaining('7일 동안 쓸 수 있어요'), findsOneWidget);
   });
+  testWidgets(
+    'explicit pattern false is sent and changing choice clears code',
+    (t) async {
+      final b = FakeBackend();
+      await showScreen(t, InviteScreen(backend: b));
+      await tapText(t, '보여 주지 않기');
+      expect(
+        t.widget<FilledButton>(find.byKey(const Key('createInvite'))).onPressed,
+        isNull,
+      );
+      await tapText(t, '단계만');
+      expect(
+        t.widget<FilledButton>(find.byKey(const Key('createInvite'))).onPressed,
+        isNull,
+      );
+      await tapText(t, '바로 공유');
+      await tapText(t, '초대 코드 만들기');
+      expect(b.invited, (ShareScope.stage, ShareTiming.now, false));
+      await tapText(t, '함께 보여 주기');
+      expect(find.text('K7Q2M9XD'), findsNothing);
+    },
+  );
 }

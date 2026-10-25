@@ -13,12 +13,16 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 
 @Composable
-fun DrivingScreen() {
+fun DrivingScreen(rest: String? = null) {
     MidnightBackground {
         Column(Modifier.fillMaxSize().padding(48.dp), verticalArrangement = Arrangement.spacedBy(36.dp, Alignment.CenterVertically),
             horizontalAlignment = Alignment.CenterHorizontally) {
             Logo(64.dp)
             Text("핸들온이 함께하고 있어요", style = MaterialTheme.typography.displayLarge, color = DarkTokens.ink, textAlign = TextAlign.Center)
+            if (rest != null) {
+                Text(REST_DRIVING, style = MaterialTheme.typography.bodyLarge, color = DarkTokens.inkMuted, textAlign = TextAlign.Center)
+                Text(rest, style = MaterialTheme.typography.bodyMedium, color = DarkTokens.inkMuted, textAlign = TextAlign.Center)
+            }
         }
     }
 }

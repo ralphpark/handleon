@@ -66,8 +66,10 @@ class SupabaseClient(
         return session
     }
 
-    suspend fun rpc(name: String, body: JsonObject = JsonObject(emptyMap())): JsonElement =
-        parse(authorized("POST", url("rest/v1/rpc/$name"), body))
+    suspend fun rpc(name: String, body: JsonObject = JsonObject(emptyMap())): JsonElement {
+        val reply = authorized("POST", url("rest/v1/rpc/$name"), body)
+        return if (reply.body.isBlank()) JsonNull else parse(reply)
+    }
 
     suspend fun select(table: String, query: String): JsonArray =
         parse(authorized("GET", url("rest/v1/$table").newBuilder().encodedQuery(query).build())).arrayOrFail()

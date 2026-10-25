@@ -19,8 +19,8 @@ class FakeBackend implements Backend {
   String? claimed;
   String? accepted;
   String? previewed;
-  (ShareScope, ShareTiming)? invited;
-  (String, ShareScope, ShareTiming)? updated;
+  (ShareScope, ShareTiming, bool)? invited;
+  (String, ShareScope, ShareTiming, bool)? updated;
   String? revoked;
   List<String> uploads = [];
   List<Share> shares = [];
@@ -29,6 +29,22 @@ class FakeBackend implements Backend {
   List<MonthRow> months = [];
   List<DayRow> days = [];
   bool linked = false;
+  bool paused = false;
+  bool? pausedSet;
+  List<PatternRow> patterns = [];
+  List<FamilyLink> links = [];
+  List<SentNote> notes = [];
+  final views = <String, FamilyView>{};
+  String? previewFamilyId;
+  NoteError? noteError;
+  (String, String)? sentNote;
+  InvitePreview invitation = const InvitePreview(
+    driverName: '아버지',
+    scope: ShareScope.trend,
+    timing: ShareTiming.d7,
+    sharePattern: false,
+  );
+  int patternsCalls = 0, linksCalls = 0;
   final tokens = <(String, String)>[];
   void check() {
     if (error != null) throw error!;
@@ -87,9 +103,13 @@ class FakeBackend implements Backend {
   }
 
   @override
-  Future<String> createInvite(ShareScope scope, ShareTiming timing) async {
+  Future<String> createInvite(
+    ShareScope scope,
+    ShareTiming timing,
+    bool sharePattern,
+  ) async {
     check();
-    invited = (scope, timing);
+    invited = (scope, timing, sharePattern);
     return 'K7Q2M9XD';
   }
 
@@ -104,9 +124,23 @@ class FakeBackend implements Backend {
     String familyId,
     ShareScope scope,
     ShareTiming timing,
+    bool sharePattern,
   ) async {
     check();
-    updated = (familyId, scope, timing);
+    updated = (familyId, scope, timing, sharePattern);
+    shares = [
+      for (final share in shares)
+        if (share.familyId == familyId)
+          Share(
+            familyId: familyId,
+            familyName: share.familyName,
+            scope: scope,
+            timing: timing,
+            sharePattern: sharePattern,
+          )
+        else
+          share,
+    ];
   }
 
   @override
@@ -120,11 +154,7 @@ class FakeBackend implements Backend {
   Future<InvitePreview> previewInvite(String code) async {
     check();
     previewed = code;
-    return const InvitePreview(
-      driverName: '아버지',
-      scope: ShareScope.trend,
-      timing: ShareTiming.d7,
-    );
+    return invitation;
   }
 
   @override
@@ -138,6 +168,86 @@ class FakeBackend implements Backend {
     check();
     feedCalls++;
     return List.of(feed);
+  }
+
+  @override
+  Future<SharingState> sharingState() async {
+    check();
+    return SharingState(
+      paused: paused,
+      recipients: [
+        for (final share in shares)
+          SharingRecipient(
+            familyName: share.familyName,
+            scope: share.scope,
+            timing: share.timing,
+            sharePattern: share.sharePattern,
+          ),
+      ],
+    );
+  }
+
+  @override
+  Future<void> setSharingPaused(bool value) async {
+    check();
+    paused = value;
+    pausedSet = value;
+  }
+
+  @override
+  Future<FamilyView> previewFamilyView(String familyId) async {
+    check();
+    previewFamilyId = familyId;
+    return views[familyId] ??
+        FamilyView(paused: paused, feed: [], patterns: []);
+  }
+
+  @override
+  Future<List<PatternRow>> familyPatterns() async {
+    check();
+    patternsCalls++;
+    return List.of(patterns);
+  }
+
+  @override
+  Future<List<FamilyLink>> familyLinks() async {
+    check();
+    linksCalls++;
+    return List.of(links);
+  }
+
+  @override
+  Future<int> sendNote(String driverId, String body) async {
+    check();
+    if (noteError != null) throw noteError!;
+    final text = body.trim();
+    if (text.isEmpty || text.runes.length > 120) throw NoteError.invalid;
+    final matches = links.where((l) => l.driverId == driverId);
+    if (matches.isEmpty) throw NoteError.shareEnded;
+    if (notes.where((n) => n.driverId == driverId && n.seenAt == null).length >=
+        3) {
+      throw NoteError.tooManyUnseen;
+    }
+    final id = notes.fold<int>(0, (m, n) => n.id > m ? n.id : m) + 1;
+    sentNote = (driverId, text);
+    notes.insert(
+      0,
+      SentNote(
+        id: id,
+        driverId: driverId,
+        driverName: matches.first.driverName,
+        body: text,
+        createdAt: DateTime.now(),
+        seenAt: null,
+      ),
+    );
+    return id;
+  }
+
+  @override
+  Future<List<SentNote>> sentNotes() async {
+    check();
+    return List.of(notes);
   }
 
   @override

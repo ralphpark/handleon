@@ -13,10 +13,36 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 @Composable
-fun ConditionScreen(ui: ConditionUi, onLabels: () -> Unit = {}, onSettings: () -> Unit = {}) {
-    ScreenFrame(notice = true) { wide ->
-        HomeHeader("운전 컨디션", ui.period, onLabels, onSettings)
-        ConditionContent(ui, wide, onLabels)
+fun ConditionScreen(ui: ConditionUi, onLabels: () -> Unit = {}, onSettings: () -> Unit = {},
+                    headerExtra: @Composable RowScope.() -> Unit = {}, homeCard: @Composable () -> Unit = {},
+                    compactHome: Boolean = false) {
+    ScreenFrame(notice = true, compact = compactHome) { wide ->
+        HomeHeader("운전 컨디션", ui.period, onLabels, onSettings, headerExtra)
+        homeCard()
+        if (compactHome && wide) CompactConditionContent(ui, onLabels)
+        else ConditionContent(ui, wide, onLabels)
+    }
+}
+
+@Composable
+private fun CompactConditionContent(ui: ConditionUi, onLabels: () -> Unit) {
+    Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+        GlassPanel(Modifier.weight(1f), padding = 20.dp) {
+            ConditionTitle(ui, false, compact = true)
+            if (ui.reasons.isEmpty()) Text("나만의 기준이 쌓이면 평소와 견주어 알려 드릴게요.",
+                style = MaterialTheme.typography.bodySmall, color = DarkTokens.inkMuted)
+            ui.reasons.forEach {
+                Text(it.line, style = MaterialTheme.typography.bodySmall, color = DarkTokens.ink)
+                Text(it.evidence, style = MaterialTheme.typography.bodySmall, color = DarkTokens.inkMuted)
+            }
+            Text("운전 지문 적립 · ${ui.collectedDays.coerceIn(0, 7)} / 7 운전일", style = MaterialTheme.typography.bodyMedium, color = DarkTokens.brand)
+            PillButton("라벨 붙이기", onLabels, kind = PillKind.SECONDARY)
+        }
+        GlassPanel(Modifier.weight(1f), padding = 20.dp) {
+            Text("최근 14운전일", style = MaterialTheme.typography.titleSmall, color = DarkTokens.ink)
+            Text("지난 28일의 나와 견준 정도예요. 점선을 이틀 연속 넘으면 알려 드려요.", style = MaterialTheme.typography.bodySmall, color = DarkTokens.inkMuted)
+            DayBars(ui.days, chartHeight = 140.dp)
+        }
     }
 }
 
@@ -38,14 +64,15 @@ fun ConditionContent(ui: ConditionUi, wide: Boolean, onLabels: () -> Unit, label
 }
 
 @Composable
-private fun ConditionTitle(ui: ConditionUi, wide: Boolean) {
+private fun ConditionTitle(ui: ConditionUi, wide: Boolean, compact: Boolean = false) {
     val color = when (ui.status) { ConditionStatus.CAUTION -> DarkTokens.watchFill; ConditionStatus.OK -> DarkTokens.brand; else -> DarkTokens.hold }
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         StageDot(color)
         Text(when (ui.status) { ConditionStatus.CAUTION -> "이틀 연속 평소와 달라요"; ConditionStatus.OK -> "평소와 비슷해요"; ConditionStatus.BUILDING -> "운전 지문 적립 중"; ConditionStatus.HOLD -> "비교를 쉬어 가요" },
             color = color, style = MaterialTheme.typography.labelLarge)
     }
-    Text(ui.title, style = if (wide) MaterialTheme.typography.displayLarge.copy(fontSize = 72.sp, lineHeight = 80.sp)
+    Text(ui.title, style = if (compact) MaterialTheme.typography.titleLarge
+        else if (wide) MaterialTheme.typography.displayLarge.copy(fontSize = 72.sp, lineHeight = 80.sp)
         else MaterialTheme.typography.displaySmall, color = DarkTokens.ink)
 }
 

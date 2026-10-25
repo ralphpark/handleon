@@ -10,6 +10,33 @@ import 'support/fake_backend.dart';
 import 'support/harness.dart';
 
 void main() {
+  testWidgets('a summary the car sent while away shows after coming back', (
+    t,
+  ) async {
+    MonthRow month(int m) => MonthRow(
+      month: DateTime(2026, m),
+      mode: 'maeum',
+      stage: 'stable',
+      domains: const {},
+      top: const [],
+    );
+    final b = FakeBackend()..months = [month(9)];
+    await showScreen(t, DriverHome(backend: b));
+    expect(find.byType(SummaryCard), findsOneWidget);
+    b.months = [month(10), month(9)];
+    for (final state in [
+      AppLifecycleState.inactive,
+      AppLifecycleState.hidden,
+      AppLifecycleState.paused,
+      AppLifecycleState.hidden,
+      AppLifecycleState.inactive,
+      AppLifecycleState.resumed,
+    ]) {
+      t.binding.handleAppLifecycleStateChanged(state);
+    }
+    await t.pumpAndSettle();
+    expect(find.byType(SummaryCard), findsNWidgets(2));
+  });
   testWidgets('two months yield two cards and disclaimer', (t) async {
     final b = FakeBackend()
       ..months = [

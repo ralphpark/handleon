@@ -54,12 +54,14 @@ class AppGraph(val context: Context) {
         setupState.value = complete
     }
     fun presentation(): Boolean = prefs.getBoolean("presentation", false)
+    fun dismissedTodayLine(): String? = prefs.getString("today_line_dismissed", null)
+    fun dismissTodayLine(day: java.time.LocalDate) = prefs.edit().putString("today_line_dismissed", day.toString()).apply()
     fun setPresentation(enabled: Boolean) {
         prefs.edit().putBoolean("presentation", enabled).apply()
         presentationState.value = enabled
     }
     fun clearUiPreferences() {
-        prefs.edit().remove("first_run_complete").remove("mode").remove("presentation").apply()
+        prefs.edit().remove("first_run_complete").remove("mode").remove("presentation").remove("today_line_dismissed").apply()
         setupState.value = false
         presentationState.value = false
     }

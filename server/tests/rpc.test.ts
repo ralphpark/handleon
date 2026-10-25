@@ -56,19 +56,19 @@ test("concurrent claims have exactly one winner and new code invalidates old cod
 });
 test("invite requires both scope and timing with no defaults", async () => {
   const d = await newUser("driver");
-  for (const [scope, delay] of [["stage", null], [null, 0], ["bad", 3], ["trend", 1]]) {
+  for (const [scope, delay, pattern] of [["stage", null, false], [null, 0, false], ["bad", 3, false], ["trend", 1, false], ["trend", 0, null]]) {
     assertEquals(
-      (await d.client.rpc("create_invite", { p_scope: scope, p_delay_days: delay })).error?.message,
+      (await d.client.rpc("create_invite", { p_scope: scope, p_delay_days: delay, p_share_pattern: pattern })).error?.message,
       "scope_and_timing_required",
     );
   }
-  const code = ok(await d.client.rpc("create_invite", { p_scope: "detail", p_delay_days: 14 }));
+  const code = ok(await d.client.rpc("create_invite", { p_scope: "detail", p_delay_days: 14, p_share_pattern: false }));
   assertMatch(code, /^[A-Z2-9]{8}$/);
 });
 test("invite accepts only family, expires, and is single use", async () => {
   const d = await newUser("driver");
   const f = await newUser("family");
-  const create = () => d.client.rpc("create_invite", { p_scope: "trend", p_delay_days: 7 });
+  const create = () => d.client.rpc("create_invite", { p_scope: "trend", p_delay_days: 7, p_share_pattern: false });
   const code = ok(await create());
   assert((await d.client.rpc("accept_invite", { p_code: code })).error);
   ok(await f.client.rpc("accept_invite", { p_code: code }));
@@ -124,6 +124,7 @@ test("share changes take effect immediately and only owner can change or revoke"
       p_family_id: family.id,
       p_scope: "stage",
       p_delay_days: 3,
+      p_share_pattern: false,
     })).error,
   );
   assert((await other.client.rpc("revoke_share", { p_family_id: family.id })).error);
@@ -132,6 +133,7 @@ test("share changes take effect immediately and only owner can change or revoke"
       p_family_id: family.id,
       p_scope: null,
       p_delay_days: 0,
+      p_share_pattern: false,
     })).error,
   );
   ok(
@@ -139,6 +141,7 @@ test("share changes take effect immediately and only owner can change or revoke"
       p_family_id: family.id,
       p_scope: "stage",
       p_delay_days: 3,
+      p_share_pattern: false,
     }),
   );
   assertEquals(ok(await family.client.rpc("get_family_feed")), []);
@@ -147,6 +150,7 @@ test("share changes take effect immediately and only owner can change or revoke"
       p_family_id: family.id,
       p_scope: "stage",
       p_delay_days: 0,
+      p_share_pattern: false,
     }),
   );
   assertEquals(ok(await family.client.rpc("get_family_feed"))[0].letter, null);
@@ -214,13 +218,13 @@ test("driver sees own active shares with family names and feed carries scope", a
 test("family previews an invite before accepting, never after or expired", async () => {
   const driver = await newUser("driver");
   const family = await newUser("family");
-  const code = ok(await driver.client.rpc("create_invite", { p_scope: "detail", p_delay_days: 7 }));
+  const code = ok(await driver.client.rpc("create_invite", { p_scope: "detail", p_delay_days: 7, p_share_pattern: false }));
   assert((await driver.client.rpc("preview_invite", { p_code: code })).error);
   assertEquals(ok(await family.client.rpc("preview_invite", { p_code: code })),
-    [{ driver_name: "시험 사용자", scope: "detail", delay_days: 7 }]);
+    [{ driver_name: "시험 사용자", scope: "detail", delay_days: 7, share_pattern: false }]);
   ok(await family.client.rpc("accept_invite", { p_code: code }));
   assertEquals((await family.client.rpc("preview_invite", { p_code: code })).error?.message, "invalid_or_expired_code");
-  const late = ok(await driver.client.rpc("create_invite", { p_scope: "stage", p_delay_days: 0 }));
+  const late = ok(await driver.client.rpc("create_invite", { p_scope: "stage", p_delay_days: 0, p_share_pattern: false }));
   ok(await admin.from("invites").update({ expires_at: hoursAgo(1) }).eq("code", late));
   assertEquals((await family.client.rpc("preview_invite", { p_code: late })).error?.message, "invalid_or_expired_code");
 });

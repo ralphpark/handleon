@@ -19,16 +19,18 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.sp
 
 @Composable
-fun RingGauge(rings: List<RingUi>, modifier: Modifier = Modifier, compact: Boolean = false) {
+fun RingGauge(rings: List<RingUi>, modifier: Modifier = Modifier, compact: Boolean = false,
+              diameter: Dp = if (compact) 260.dp else 340.dp) {
     val available = rings.any { it.fraction != null }
     val count = rings.count { it.over }
     val description = rings.joinToString(". ") { "${domainName(it.domain)}: ${when {
         it.fraction == null -> "기록을 모으는 중"; it.over -> "평소 범위를 넘었어요"; else -> "평소와 비슷해요"
     }}" }
-    Box(modifier.size(if (compact) 260.dp else 340.dp).semantics { contentDescription = description }, Alignment.Center) {
+    Box(modifier.size(diameter).semantics { contentDescription = description }, Alignment.Center) {
         Canvas(Modifier.fillMaxSize()) {
             val unit = size.minDimension / if (compact) 260f else 340f
             val radii = if (compact) listOf(120f, 96f, 72f) else listOf(150f, 118f, 86f)

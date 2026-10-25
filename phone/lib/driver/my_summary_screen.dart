@@ -21,10 +21,19 @@ class _DriverHomeState extends State<DriverHome> {
   bool loading = true;
   String? error;
   int generation = 0;
+  // 앱을 떠나 있는 동안 차가 보낸 요약을 돌아오면 바로 보여 준다.
+  late final AppLifecycleListener lifecycle;
   @override
   void initState() {
     super.initState();
+    lifecycle = AppLifecycleListener(onResume: load);
     load();
+  }
+
+  @override
+  void dispose() {
+    lifecycle.dispose();
+    super.dispose();
   }
 
   Future<void> load() async {

@@ -59,7 +59,7 @@ class ReplayViewModel : ViewModel() {
                 }
                 mutable.update { it.copy(complete = true) }
                 finalReport?.let { report ->
-                    try { (app as HandleOnApp).graph.carSync.uploadReplay(report) }
+                    try { (app as HandleOnApp).graph.carSync.uploadReplay(report, trips) }
                     catch (cancelled: CancellationException) { throw cancelled }
                     catch (_: Exception) { /* Playback remains complete; no sensitive network errors enter UI/logs. */ }
                 }

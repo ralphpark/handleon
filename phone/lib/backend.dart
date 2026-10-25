@@ -29,17 +29,29 @@ abstract class Backend {
   Future<void> claimPairing(String code);
   Future<bool> carLinked();
   Future<void> uploadImport(String contractAJson);
-  Future<String> createInvite(ShareScope scope, ShareTiming timing);
+  Future<String> createInvite(
+    ShareScope scope,
+    ShareTiming timing,
+    bool sharePattern,
+  );
   Future<List<Share>> myShares();
   Future<void> updateShare(
     String familyId,
     ShareScope scope,
     ShareTiming timing,
+    bool sharePattern,
   );
+  Future<SharingState> sharingState();
+  Future<void> setSharingPaused(bool paused);
+  Future<FamilyView> previewFamilyView(String familyId);
   Future<void> revokeShare(String familyId);
   Future<InvitePreview> previewInvite(String code);
   Future<void> acceptInvite(String code);
   Future<List<FeedRow>> familyFeed();
+  Future<List<PatternRow>> familyPatterns();
+  Future<List<FamilyLink>> familyLinks();
+  Future<int> sendNote(String driverId, String body);
+  Future<List<SentNote>> sentNotes();
   Future<List<MonthRow>> mySummaries();
   Future<List<DayRow>> myConditions();
   Future<void> registerPushToken(String token, String platform);
@@ -51,15 +63,18 @@ class Share {
     required this.familyName,
     required this.scope,
     required this.timing,
+    required this.sharePattern,
   });
   final String familyId, familyName;
   final ShareScope scope;
   final ShareTiming timing;
+  final bool sharePattern;
   factory Share.fromJson(Map<String, dynamic> j) => Share(
-    familyId: j['family_id'] as String,
-    familyName: j['family_name'] as String? ?? '가족',
+    familyId: _string(j['family_id']),
+    familyName: _string(j['family_name'] ?? '가족'),
     scope: _scope(j['scope']),
     timing: _timing(j['delay_days']),
+    sharePattern: _boolean(j['share_pattern']),
   );
 }
 
@@ -68,21 +83,239 @@ class InvitePreview {
     required this.driverName,
     required this.scope,
     required this.timing,
+    required this.sharePattern,
   });
   final String driverName;
   final ShareScope scope;
   final ShareTiming timing;
+  final bool sharePattern;
   factory InvitePreview.fromJson(Map<String, dynamic> j) => InvitePreview(
-    driverName: j['driver_name'] as String? ?? '가족',
+    driverName: _string(j['driver_name'] ?? '가족'),
     scope: _scope(j['scope']),
     timing: _timing(j['delay_days']),
+    sharePattern: _boolean(j['share_pattern']),
   );
 }
 
 ShareScope _scope(Object? v) =>
     ShareScope.fromWire(v) ?? (throw const FormatException());
 ShareTiming _timing(Object? v) =>
-    ShareTiming.fromWire(v) ?? (throw const FormatException());
+    ShareTiming.fromWire(_integer(v)) ?? (throw const FormatException());
+
+bool _boolean(Object? value) =>
+    value is bool ? value : throw const FormatException();
+String _string(Object? value) =>
+    value is String ? value : throw const FormatException();
+Map<String, dynamic> _object(Object? value) {
+  if (value is! Map<String, dynamic>) throw const FormatException();
+  return value;
+}
+
+double? _optionalNumber(Object? value) {
+  if (value == null) return null;
+  if (value is! num) throw const FormatException();
+  return value.isFinite ? value.toDouble() : null;
+}
+
+int? _optionalInteger(Object? value) {
+  if (value == null) return null;
+  if (value is int) return value;
+  if (value is! num) throw const FormatException();
+  if (!value.isFinite) return null;
+  if (value != value.truncateToDouble()) throw const FormatException();
+  return value.toInt();
+}
+
+int _integer(Object? value) =>
+    _optionalInteger(value) ?? (throw const FormatException());
+
+DateTime _month(Object? value) {
+  final raw = _string(value);
+  if (!RegExp(r'^\d{4}-\d{2}-01$').hasMatch(raw)) {
+    throw const FormatException();
+  }
+  final year = int.parse(raw.substring(0, 4));
+  final month = int.parse(raw.substring(5, 7));
+  if (year < 1 || month < 1 || month > 12) throw const FormatException();
+  return DateTime(year, month);
+}
+
+DateTime _timestamp(Object? value) {
+  final raw = _string(value);
+  final match = RegExp(
+    r'^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2}):(\d{2})(?:\.\d+)?(Z|[+-]\d{2}:\d{2})$',
+  ).firstMatch(raw);
+  if (match == null) throw const FormatException();
+  final parts = [for (var i = 1; i <= 6; i++) int.parse(match.group(i)!)];
+  final date = DateTime.utc(parts[0], parts[1], parts[2]);
+  final zone = match.group(7)!;
+  if (parts[0] < 1 ||
+      date.year != parts[0] ||
+      date.month != parts[1] ||
+      date.day != parts[2] ||
+      parts[3] > 23 ||
+      parts[4] > 59 ||
+      parts[5] > 59 ||
+      (zone != 'Z' &&
+          (int.parse(zone.substring(1, 3)) > 23 ||
+              int.parse(zone.substring(4, 6)) > 59))) {
+    throw const FormatException();
+  }
+  return DateTime.parse(raw);
+}
+
+class SharingRecipient {
+  const SharingRecipient({
+    required this.familyName,
+    required this.scope,
+    required this.timing,
+    required this.sharePattern,
+  });
+  final String familyName;
+  final ShareScope scope;
+  final ShareTiming timing;
+  final bool sharePattern;
+  factory SharingRecipient.fromJson(Map<String, dynamic> j) => SharingRecipient(
+    familyName: _string(j['family_name']),
+    scope: _scope(j['scope']),
+    timing: _timing(j['delay_days']),
+    sharePattern: _boolean(j['share_pattern']),
+  );
+}
+
+class SharingState {
+  const SharingState({required this.paused, required this.recipients});
+  final bool paused;
+  final List<SharingRecipient> recipients;
+  factory SharingState.fromJson(Map<String, dynamic> j) => SharingState(
+    paused: _boolean(j['paused']),
+    recipients: _rows(j['recipients']).map(SharingRecipient.fromJson).toList(),
+  );
+}
+
+class PatternRow {
+  const PatternRow({
+    required this.driverId,
+    required this.driverName,
+    required this.month,
+    required this.partial,
+    required this.trips,
+    required this.driveMinutes,
+    required this.driveDays,
+    this.nightRatio,
+    this.longRatio,
+    this.radiusRatio,
+    this.placesRatio,
+    this.usualTrips,
+    this.usualMinutes,
+    this.usualNightRatio,
+    this.usualLongRatio,
+  });
+  final String driverId, driverName;
+  final DateTime month;
+  final bool partial;
+  final int trips, driveMinutes, driveDays;
+  final double? nightRatio, longRatio, radiusRatio, placesRatio;
+  final int? usualTrips, usualMinutes;
+  final double? usualNightRatio, usualLongRatio;
+  factory PatternRow.fromJson(Map<String, dynamic> j) => PatternRow(
+    driverId: _string(j['driver_id']),
+    driverName: _string(j['driver_name']),
+    month: _month(j['month']),
+    partial: _boolean(j['partial']),
+    trips: _integer(j['trips']),
+    driveMinutes: _integer(j['drive_minutes']),
+    driveDays: _integer(j['drive_days']),
+    nightRatio: _optionalNumber(j['night_ratio']),
+    longRatio: _optionalNumber(j['long_ratio']),
+    radiusRatio: _optionalNumber(j['radius_ratio']),
+    placesRatio: _optionalNumber(j['places_ratio']),
+    usualTrips: _optionalInteger(j['usual_trips']),
+    usualMinutes: _optionalInteger(j['usual_minutes']),
+    usualNightRatio: _optionalNumber(j['usual_night_ratio']),
+    usualLongRatio: _optionalNumber(j['usual_long_ratio']),
+  );
+}
+
+class FamilyLink {
+  const FamilyLink({
+    required this.driverId,
+    required this.driverName,
+    required this.scope,
+    required this.timing,
+    required this.sharePattern,
+    required this.paused,
+  });
+  final String driverId, driverName;
+  final ShareScope scope;
+  final ShareTiming timing;
+  final bool sharePattern, paused;
+  factory FamilyLink.fromJson(Map<String, dynamic> j) => FamilyLink(
+    driverId: _string(j['driver_id']),
+    driverName: _string(j['driver_name']),
+    scope: _scope(j['scope']),
+    timing: _timing(j['delay_days']),
+    sharePattern: _boolean(j['share_pattern']),
+    paused: _boolean(j['paused']),
+  );
+}
+
+class FamilyView {
+  const FamilyView({
+    required this.paused,
+    required this.feed,
+    required this.patterns,
+  });
+  final bool paused;
+  final List<FeedRow> feed;
+  final List<PatternRow> patterns;
+  factory FamilyView.fromJson(Map<String, dynamic> j) => FamilyView(
+    paused: _boolean(j['paused']),
+    feed: _rows(j['feed']).map(FeedRow.fromJson).toList(),
+    patterns: _rows(j['patterns']).map(PatternRow.fromJson).toList(),
+  );
+}
+
+class SentNote {
+  const SentNote({
+    required this.id,
+    required this.driverId,
+    required this.driverName,
+    required this.body,
+    required this.createdAt,
+    required this.seenAt,
+  });
+  final int id;
+  final String driverId, driverName, body;
+  final DateTime createdAt;
+  final DateTime? seenAt;
+  factory SentNote.fromJson(Map<String, dynamic> j) => SentNote(
+    id: _integer(j['id']),
+    driverId: _string(j['driver_id']),
+    driverName: _string(j['driver_name']),
+    body: _string(j['body']),
+    createdAt: _timestamp(j['created_at']),
+    seenAt: j['seen_at'] == null ? null : _timestamp(j['seen_at']),
+  );
+}
+
+enum NoteError implements Exception {
+  invalid,
+  tooManyUnseen,
+  shareEnded,
+  other;
+
+  static NoteError fromError(Object error) {
+    if (error is NoteError) return error;
+    if (error is! PostgrestException) return other;
+    return switch (error.message) {
+      'invalid_note' => invalid,
+      'too_many_unseen' => tooManyUnseen,
+      'share_not_found' => shareEnded,
+      _ => other,
+    };
+  }
+}
 
 class TopItem {
   const TopItem({
@@ -92,26 +325,22 @@ class TopItem {
   });
   final String text, grade, feature;
   factory TopItem.fromJson(Map<String, dynamic> j) => TopItem(
-    text: j['text'] as String,
-    grade: j['grade'] as String,
-    feature: j['feature'] as String,
+    text: _string(j['text']),
+    grade: _string(j['grade']),
+    feature: _string(j['feature']),
   );
 }
 
 Map<String, double>? _domains(Object? raw) => raw == null
     ? null
     : {
-        for (final entry in (raw as Map).entries)
+        for (final entry in _object(raw).entries)
           // 개인 임계값 대비 비율이라 0 보다 작아도 실제 값이다(평소보다 덜 달라짐).
           if (entry.value is num && (entry.value as num).isFinite)
-            entry.key as String: (entry.value as num).toDouble(),
+            entry.key: (entry.value as num).toDouble(),
       };
-List<TopItem>? _top(Object? raw) => raw == null
-    ? null
-    : (raw as List)
-          .take(3)
-          .map((e) => TopItem.fromJson(Map<String, dynamic>.from(e as Map)))
-          .toList();
+List<TopItem>? _top(Object? raw) =>
+    raw == null ? null : _rows(raw).take(3).map(TopItem.fromJson).toList();
 
 class MonthRow {
   const MonthRow({
@@ -129,12 +358,12 @@ class MonthRow {
   final List<TopItem>? top;
   final String? letter;
   factory MonthRow.fromJson(Map<String, dynamic> j) => MonthRow(
-    month: DateTime.parse(j['month'] as String),
+    month: _month(j['month']),
     mode: j['mode'] as String,
-    stage: j['stage'] as String,
+    stage: _string(j['stage']),
     domains: _domains(j['domains']),
     top: _top(j['top']),
-    letter: j['letter'] as String?,
+    letter: j['letter'] == null ? null : _string(j['letter']),
     source: j['source'] as String,
   );
 }
@@ -153,14 +382,14 @@ class FeedRow extends MonthRow {
   final String driverId, driverName;
   final ShareScope scope;
   factory FeedRow.fromJson(Map<String, dynamic> j) => FeedRow(
-    driverId: j['driver_id'] as String,
-    driverName: j['driver_name'] as String? ?? '가족',
-    month: DateTime.parse(j['month'] as String),
-    stage: j['stage'] as String,
+    driverId: _string(j['driver_id']),
+    driverName: _string(j['driver_name'] ?? '가족'),
+    month: _month(j['month']),
+    stage: _string(j['stage']),
     scope: _scope(j['scope']),
     domains: _domains(j['domains']),
     top: _top(j['top']),
-    letter: j['letter'] as String?,
+    letter: j['letter'] == null ? null : _string(j['letter']),
   );
 }
 
@@ -208,7 +437,7 @@ String friendlyError(Object error) {
       : error.toString();
   if (message.contains('invalid_or_expired_code')) return '코드가 맞지 않거나 시간이 지났어요';
   if (message.contains('scope_and_timing_required')) {
-    return '보여 줄 것과 시점을 둘 다 골라 주세요';
+    return '보여 줄 범위와 시점, 운전 패턴 공유 여부를 모두 골라 주세요';
   }
   if (error is SocketException ||
       error is TimeoutException ||
@@ -381,11 +610,18 @@ class SupabaseBackend implements Backend {
   }
 
   @override
-  Future<String> createInvite(ShareScope scope, ShareTiming timing) async =>
-      await client.rpc(
-        'create_invite',
-        params: {'p_scope': scope.wire, 'p_delay_days': timing.wire},
-      ) as String;
+  Future<String> createInvite(
+    ShareScope scope,
+    ShareTiming timing,
+    bool sharePattern,
+  ) async => await client.rpc(
+    'create_invite',
+    params: {
+      'p_scope': scope.wire,
+      'p_delay_days': timing.wire,
+      'p_share_pattern': sharePattern,
+    },
+  ) as String;
   @override
   Future<List<Share>> myShares() async =>
       _rows(await client.rpc('get_my_shares')).map(Share.fromJson).toList();
@@ -394,6 +630,7 @@ class SupabaseBackend implements Backend {
     String familyId,
     ShareScope scope,
     ShareTiming timing,
+    bool sharePattern,
   ) async {
     await client.rpc(
       'update_share',
@@ -401,9 +638,60 @@ class SupabaseBackend implements Backend {
         'p_family_id': familyId,
         'p_scope': scope.wire,
         'p_delay_days': timing.wire,
+        'p_share_pattern': sharePattern,
       },
     );
   }
+
+  @override
+  Future<SharingState> sharingState() async =>
+      SharingState.fromJson(_object(await client.rpc('get_sharing_state')));
+
+  @override
+  Future<void> setSharingPaused(bool paused) async {
+    await client.rpc('set_sharing_paused', params: {'p_paused': paused});
+  }
+
+  @override
+  Future<FamilyView> previewFamilyView(String familyId) async =>
+      FamilyView.fromJson(
+        _object(
+          await client.rpc(
+            'preview_family_view',
+            params: {'p_family_id': familyId},
+          ),
+        ),
+      );
+
+  @override
+  Future<List<PatternRow>> familyPatterns() async =>
+      _rows(await client.rpc('get_family_patterns'))
+          .map(PatternRow.fromJson)
+          .toList();
+
+  @override
+  Future<List<FamilyLink>> familyLinks() async =>
+      _rows(await client.rpc('get_family_links'))
+          .map(FamilyLink.fromJson)
+          .toList();
+
+  @override
+  Future<int> sendNote(String driverId, String body) async {
+    try {
+      return _integer(
+        await client.rpc(
+          'send_family_note',
+          params: {'p_driver_id': driverId, 'p_body': body},
+        ),
+      );
+    } catch (error) {
+      throw NoteError.fromError(error);
+    }
+  }
+
+  @override
+  Future<List<SentNote>> sentNotes() async =>
+      _rows(await client.rpc('get_sent_notes')).map(SentNote.fromJson).toList();
 
   @override
   Future<void> revokeShare(String familyId) async {
@@ -460,8 +748,11 @@ class SupabaseBackend implements Backend {
   }
 }
 
-List<Map<String, dynamic>> _rows(dynamic result) =>
-    (result as List).map((r) => Map<String, dynamic>.from(r as Map)).toList();
+List<Map<String, dynamic>> _rows(Object? result) {
+  if (result is! List) throw const FormatException();
+  return result.map(_object).toList();
+}
+
 String _uuid() {
   final random = Random.secure();
   final bytes = List.generate(16, (_) => random.nextInt(256));

@@ -6,8 +6,9 @@
 
 ## 상태
 
-`0001`~`0007` 마이그레이션과 두 Edge Function 을 개발용 Supabase 프로젝트에 적용해 차량 앱·휴대폰 앱과 함께
-실서버로 확인했습니다(차 연결, 월 요약, 실제 Claude 월간 편지, 가족 공유·피드, FCM 푸시, 과거 기록 가져오기).
+`0001`~`0008` 마이그레이션과 두 Edge Function 을 개발용 Supabase 프로젝트에 적용해 차량 앱·휴대폰 앱과 함께
+실서버로 확인했습니다(차 연결, 월 요약, 실제 Claude 월간 편지, 가족 공유·피드, FCM 푸시, 과거 기록 가져오기,
+공유 일시중지·모두 끊기, 운전 패턴 공유, 가족이 보는 화면 미리보기, 가족 한마디).
 
 ## 구성
 
@@ -17,6 +18,15 @@
 - `0005_hardening.sql`: 보안 점검 반영.
 - `0006_phone_screens.sql`: 휴대폰 화면용 RPC(내 공유 목록, 초대 미리보기, 피드의 공유 범위).
 - `0007_dispatch_every_minute.sql`: 발송 cron 을 1분마다(“바로 공유”가 1분 안에 도착).
+- `0008_share_controls_patterns_notes.sql`: 공유 통제와 새 공유 항목.
+  - 받는 사람별 `share_pattern`(운전 패턴 공유 여부). 초대·수정 RPC 가 값을 반드시 받습니다(기본값 없음).
+  - 운전자 전체 일시중지(`set_sharing_paused`)와 모두 끊기(`revoke_all_shares`). 휴대폰의 운전자와
+    연결된 차 어디서나 부릅니다. 멈춘 동안 가족 피드·패턴이 비고, 대기 알림은 취소되며 새 알림도 만들지 않습니다.
+  - `monthly_patterns`: 월별 운전 횟수·시간·운전한 날·밤/장거리 비율, 생활반경·가는 곳 가짓수는 본인 기준
+    대비 비율로만. 지명·좌표·km 값 열이 없고, 범위 검사로 값을 묶습니다.
+  - 가족 화면 행은 `family_feed_for`·`family_patterns_for` 두 내부 함수만 만듭니다. 가족 피드와 운전자의
+    `preview_family_view`(가족이 보는 화면)가 같은 함수를 써서 결과가 같습니다.
+  - `family_notes`: 가족 → 운전자 한마디(120자, 읽지 않은 것 가족당 3개까지, 90일 뒤 cron 으로 삭제).
 - `0004_storage.sql`: 비공개 JSON 5 MB `imports` 버킷과 폴더별 정책.
 - `supabase/functions/monthly-letter/index.ts`: 차량 인증 → 편지 생성 → 해당 운전자의 월 요약 저장.
 - `supabase/functions/dispatch-notifications/index.ts`: 서비스 롤 인증 → 큐 조회 → 현재 동의 재확인
@@ -49,7 +59,7 @@ fetch로 대체합니다. 편지 제한 시간 시험은 실제로 약 20초 걸
 ## 새 프로젝트에 적용하는 순서
 
 1. 승인된 개발용 Supabase 프로젝트에서 익명 로그인 활성화, 이메일 로그인 설정 확인. `0001`부터
-   `0007`까지 순서대로 적용합니다. **아래 SQL 전제와 RLS를 실서버에서 먼저 확인합니다.**
+   `0008`까지 순서대로 적용합니다. **아래 SQL 전제와 RLS를 실서버에서 먼저 확인합니다.**
 2. 로컬 `server/.env.test`에 `.env.test.example`의 세 이름에 대응하는 값을 직접 설정합니다. 이
    파일은 저장소 루트 `.gitignore`에서 이미 제외됩니다. 파일·토큰 내용을 로그에 출력하지 않습니다.
 3. Vault `vault.decrypted_secrets`에 `service_role_key`, `project_url` 이름의 비밀값이 각각 하나씩
@@ -66,8 +76,11 @@ fetch로 대체합니다. 편지 제한 시간 시험은 실제로 약 20초 걸
    않습니다. 실행 도중 종료하면 시험 계정이나 파일이 남을 수 있으므로 개발 프로젝트에서 정리합니다.
 
 ```sh
-DENO_DIR=$PWD/../.cache/deno deno test -A --cached-only --env-file=.env.test tests/smoke.test.ts tests/rls.test.ts tests/rpc.test.ts tests/notify.test.ts tests/storage.test.ts
+DENO_DIR=$PWD/../.cache/deno deno test -A --cached-only --env-file=.env.test tests/smoke.test.ts tests/rls.test.ts tests/rpc.test.ts tests/notify.test.ts tests/storage.test.ts tests/controls.test.ts
 ```
+
+   익명 가입은 Supabase 기본 제한(IP 당 시간당 횟수)이 있어, 전체를 한 번에 돌리면 뒤쪽 시험이 `Request rate limit reached`
+   로 실패할 수 있습니다. 그때는 한 시간 뒤 남은 파일만 다시 돌립니다.
 
 7. Supabase security advisor, SQL 함수 ACL·`security definer`·고정 `search_path`, 모든 테이블 RLS 및
    `storage.objects` RLS 활성화를 검사합니다. `pgcrypto`의 `gen_random_bytes`가 `extensions`

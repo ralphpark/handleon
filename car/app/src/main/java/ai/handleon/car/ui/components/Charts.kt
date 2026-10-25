@@ -16,15 +16,16 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
 import java.time.YearMonth
 import java.time.temporal.ChronoUnit
 
 @Composable
-fun DayBars(days: List<DayResult>, modifier: Modifier = Modifier) {
+fun DayBars(days: List<DayResult>, modifier: Modifier = Modifier, chartHeight: Dp = 280.dp) {
     val latest = days.takeLast(14)
     Column(modifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("점선 · 평소 범위", style = MaterialTheme.typography.bodySmall, color = DarkTokens.inkMuted)
-        Canvas(Modifier.fillMaxWidth().height(280.dp).semantics {
+        Canvas(Modifier.fillMaxWidth().height(chartHeight).semantics {
             contentDescription = "최근 ${latest.size}운전일, 기준을 넘은 날 ${latest.count { day -> day.index?.let { value -> day.threshold?.let { value > it } } == true }}일. 빈 칸은 비교할 기록이 없는 날이에요."
         }) {
             val range = chartRange(latest.flatMap { listOfNotNull(it.index, it.threshold) })

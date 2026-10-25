@@ -29,6 +29,9 @@ import java.io.File
 import java.time.LocalDate
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import java.time.Instant
 
 sealed class Screen(val key: String) {
     data object FirstRun : Screen("first")
@@ -47,6 +50,7 @@ sealed class Screen(val key: String) {
 fun presentationScreen(screen: Screen, presentation: Boolean): Screen =
     if (screen == Screen.DevEngine && !presentation) Screen.Settings else screen
 
+// 발표 모드의 엔진 화면만 주행 중에도 남긴다(시연용, 조작 없는 읽기 화면). 나머지는 모두 주행 화면.
 fun showDrivingScreen(driving: Boolean, presentation: Boolean, screen: Screen): Boolean =
     driving && !(presentation && screen == Screen.DevEngine)
 
@@ -54,7 +58,8 @@ fun showDrivingScreen(driving: Boolean, presentation: Boolean, screen: Screen): 
 fun Nav(graph: AppGraph, engine: EngineState, replay: ReplayViewModel, driving: Boolean,
         onboarded: Boolean, collectionAllowed: Boolean, onStart: (Mode) -> Unit,
         onRequestPermissions: () -> Unit, onDataCleared: () -> Unit,
-        alwaysLocation: Boolean = false, onAlwaysLocation: () -> Unit = {}) {
+        alwaysLocation: Boolean = false, onAlwaysLocation: () -> Unit = {},
+        isDriving: () -> Boolean = { driving }) {
     var route by rememberSaveable { mutableStateOf(if (onboarded) Screen.Home.key else Screen.FirstRun.key) }
     var centerReturn by rememberSaveable { mutableStateOf(Screen.Home.key) }
     var modeName by rememberSaveable { mutableStateOf(graph.mode().name) }
@@ -78,6 +83,24 @@ fun Nav(graph: AppGraph, engine: EngineState, replay: ReplayViewModel, driving: 
     var centerUi by remember { mutableStateOf(CenterUi()) }
     var letter by remember { mutableStateOf<LetterUi?>(null) }
     val sync by graph.syncState.state.collectAsStateWithLifecycle()
+    var sharing by remember(sync.driverId) { mutableStateOf<SharingUi?>(null) }
+    var notes by remember(sync.driverId) { mutableStateOf<List<CarNote>>(emptyList()) }
+    var familyError by remember(sync.driverId) { mutableStateOf<String?>(null) }
+    var familyBusy by remember { mutableStateOf(false) }
+    var revokeDialog by rememberSaveable { mutableStateOf(false) }
+    var todayTripDay by remember { mutableStateOf<LocalDate?>(null) }
+    var dismissedLine by remember { mutableStateOf(graph.dismissedTodayLine()) }
+    var nowMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    var restEndMs by rememberSaveable { mutableStateOf<Long?>(null) }
+    var restFinished by rememberSaveable { mutableStateOf(false) }
+    val notifications = remember(graph) { RestNotifications(graph.context) }
+    val session by CollectorService.driveSession.collectAsStateWithLifecycle()
+    // 발표에서는 2분 주행으로 쉬어 가기를 시연할 수 있도록 줄인다. 평소에는 2시간이다.
+    val restAfterMs = if (graph.presentation()) 2 * 60_000L else 2 * 3_600_000L
+    val familyMutex = remember { Mutex() }
+    var familyJob by remember { mutableStateOf<Job?>(null) }
+    // The Activity getter sees a UX restriction change even before the next composition.
+    val drivingNow by rememberUpdatedState(isDriving)
     val pairingController = remember(graph) {
         PairingController(graph.supabase.configured, graph.pairing, graph.syncState, { SyncWorker.enqueue(graph.context) })
     }
@@ -89,12 +112,19 @@ fun Nav(graph: AppGraph, engine: EngineState, replay: ReplayViewModel, driving: 
     val drivingScreen = showDrivingScreen(driving, presentation, screen)
     val replayUi by replay.state.collectAsStateWithLifecycle()
     val lifecycle = LocalLifecycleOwner.current.lifecycle
-    val lifecycleState by lifecycle.currentStateFlow.collectAsStateWithLifecycle()
-    val today = LocalDate.now(KST)
+    // Do not suspend this observer at STOPPED: polling/timer effects must see leaving RESUMED.
+    val lifecycleState by lifecycle.currentStateFlow.collectAsState()
+    val today = Instant.ofEpochMilli(nowMs).atZone(KST).toLocalDate()
+    val resumed = lifecycleState.isAtLeast(Lifecycle.State.RESUMED)
+    val restUi = if (!driving && (restEndMs != null || restFinished || restEligible(session, nowMs, restAfterMs)))
+        RestUi(restEndMs?.let { (it - nowMs).coerceAtLeast(0) }, restFinished) else null
+    val card = topCard(restUi, notes.firstOrNull(), visibleTodayLine(today, mode, todayTripDay == today, dismissedLine))
 
     suspend fun refreshLocal() {
         home = graph.tripRepository.home()
-        progress = CollectionProgress.from(graph.tripRepository.trips())
+        val trips = graph.tripRepository.trips()
+        progress = CollectionProgress.from(trips)
+        todayTripDay = today.takeIf { hasTripToday(trips, today) }
         labels = graph.tripRepository.labels()
         resets = graph.tripRepository.resets()
     }
@@ -119,6 +149,84 @@ fun Nav(graph: AppGraph, engine: EngineState, replay: ReplayViewModel, driving: 
         }
     }
     fun openCenter() { centerReturn = screen.key; route = Screen.Center.key }
+
+    fun parkedAndResumed() = !drivingNow() && lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
+    fun familyAvailable() = parkedAndResumed() && graph.syncState.driverId != null &&
+        Screen.from(route) in listOf(Screen.Home, Screen.Settings)
+
+    fun familyAction(block: suspend () -> Unit) {
+        if (familyBusy || !familyAvailable()) return
+        val driver = graph.syncState.driverId
+        familyBusy = true
+        familyJob = scope.launch {
+            try {
+                familyMutex.withLock {
+                    ensureActive()
+                    if (familyAvailable() && graph.syncState.driverId == driver) { familyError = null; block() }
+                }
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) { familyError = LOAD_UNAVAILABLE }
+            finally { familyBusy = false }
+        }
+    }
+    fun toggleSharing() {
+        val value = sharing ?: return
+        familyAction {
+            graph.carSync.setSharingPaused(!value.paused)
+            sharing = value.copy(paused = !value.paused)
+            if (familyAvailable()) sharing = graph.carSync.sharingState()
+        }
+    }
+
+    LaunchedEffect(driving, resumed, sync.driverId) {
+        if (driving || !resumed || sync.driverId == null) familyJob?.cancel()
+        if (driving) {
+            restEndMs = null; restFinished = false; revokeDialog = false
+            notifications.cancel()
+        }
+    }
+    LaunchedEffect(sync.driverId) { familyJob?.cancel(); revokeDialog = false }
+    LaunchedEffect(resumed, driving) {
+        if (resumed && !driving) while (isActive) { nowMs = System.currentTimeMillis(); delay(1000) }
+    }
+    LaunchedEffect(restEndMs, resumed, driving) {
+        // ponytail: 화면 밖 알림(AlarmManager 등)은 후속 범위. 화면이 RESUMED일 때만 완료한다.
+        if (!resumed && !driving) return@LaunchedEffect
+        while (isActive) {
+            val tick = restTimerTick(restEndMs, System.currentTimeMillis(), drivingNow(),
+                lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED))
+            restEndMs = tick.endMs
+            if (drivingNow()) restFinished = false
+            if (tick.finished) restFinished = true
+            if (tick.notify && parkedAndResumed()) notifications.finished(drivingNow())
+            if (tick.endMs == null) break
+            delay(1000)
+        }
+    }
+    LaunchedEffect(screen, driving, resumed, sync.driverId) {
+        if (driving || !resumed || sync.driverId == null || screen !in listOf(Screen.Home, Screen.Settings)) return@LaunchedEffect
+        val pollingDriver = sync.driverId
+        do {
+            familyMutex.withLock {
+                val update = refreshParkedFamily(
+                    canRead = { familyAvailable() && graph.syncState.driverId == pollingDriver },
+                    homeVisible = { Screen.from(route) == Screen.Home },
+                    readSharing = graph.carSync::sharingState, readNotes = graph.carSync::notes)
+                update.sharing?.let { sharing = it }
+                update.notes?.let { notes = it }
+                familyError = update.error
+            }
+            if (screen != Screen.Home) break
+            delay(60_000)
+        } while (isActive)
+    }
+    LaunchedEffect(screen, driving, resumed, today) {
+        if (onboarded && screen == Screen.Home && !driving && resumed) {
+            try { todayTripDay = today.takeIf { hasTripToday(graph.tripRepository.trips(), today) } }
+            catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) { todayTripDay = null }
+        }
+    }
 
     LaunchedEffect(route, presentation) {
         if (!presentation && Screen.from(route) == Screen.DevEngine) route = Screen.Settings.key
@@ -172,13 +280,28 @@ fun Nav(graph: AppGraph, engine: EngineState, replay: ReplayViewModel, driving: 
     }
     BackHandler(drivingScreen || screen !in listOf(Screen.Home, Screen.FirstRun)) { if (!drivingScreen) back() }
 
-    if (drivingScreen) { DrivingScreen(); return }
+    if (drivingScreen) {
+        DrivingScreen(session?.takeIf { it.continuousMs >= restAfterMs }?.let { continuousDriveText(it.continuousMs) })
+        return
+    }
+    val sharingHeader: @Composable RowScope.() -> Unit = {
+        sharing?.takeIf { sync.driverId != null && it.showHome }?.let { SharingBar(it, familyBusy, ::toggleSharing) }
+    }
+    val homeCard: @Composable () -> Unit = {
+        card?.let { HomeCardPanel(it, familyBusy,
+            onStartTimer = { if (parkedAndResumed()) { restEndMs = System.currentTimeMillis() + REST_TIMER_MS; restFinished = false; notifications.cancel() } },
+            onStopTimer = { restEndMs = null; restFinished = false; notifications.cancel() },
+            onNoteSeen = { id -> familyAction { graph.carSync.markNoteSeen(id); notes = notesAfterSeen(notes, id) } },
+            onDismissLine = { graph.dismissTodayLine(today); dismissedLine = today.toString() }, onCenter = ::openCenter) }
+    }
     Column(Modifier.fillMaxSize().background(DarkTokens.surface)) {
         if (error != null) Text(error!!, Modifier.padding(24.dp), style = MaterialTheme.typography.bodySmall, color = DarkTokens.inkMuted)
         if (onboarded && !collectionAllowed && screen == Screen.Home) Row(Modifier.fillMaxWidth().padding(24.dp), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
             Text("위치 권한을 허용하면 운전 기록을 모을 수 있어요", Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, color = DarkTokens.inkMuted)
             PillButton("권한 다시 확인", onRequestPermissions, kind = PillKind.SECONDARY)
         }
+        if (screen == Screen.Home && familyError != null) Text(LOAD_UNAVAILABLE, Modifier.padding(horizontal = 24.dp),
+            style = MaterialTheme.typography.bodySmall, color = DarkTokens.inkMuted)
         Box(Modifier.weight(1f)) {
             when (screen) {
                 Screen.FirstRun -> FirstRunScreen(FirstRunUi(birth, Mode.valueOf(firstMode), listOf(consent0, consent1, consent2), starting), today,
@@ -187,9 +310,10 @@ fun Nav(graph: AppGraph, engine: EngineState, replay: ReplayViewModel, driving: 
                 Screen.Home -> if (mode == Mode.MAEUM) MaeumScreen(
                     MaeumUi.from(engine.long, home, progress, letter).copy(pastSelected = past, blueLink = blueLink),
                     onLabels = { route = Screen.Labels.key }, onSettings = { route = Screen.Settings.key }, onCenter = ::openCenter, onTab = { past = it },
-                    onLetter = { route = Screen.Letter.key })
+                    onLetter = { route = Screen.Letter.key }, headerExtra = sharingHeader, homeCard = homeCard, compactHome = card != null)
                 else ConditionScreen(ConditionUi.from(engine.condition, labels.keys, resets),
-                    onLabels = { route = Screen.Labels.key }, onSettings = { route = Screen.Settings.key })
+                    onLabels = { route = Screen.Labels.key }, onSettings = { route = Screen.Settings.key },
+                    headerExtra = sharingHeader, homeCard = homeCard, compactHome = card != null)
                 Screen.Labels -> LabelsScreen(LabelsUi(today, yesterday, labels[if (yesterday) today.minusDays(1) else today], busy),
                     onDay = { if (!busy) yesterday = it }, onLabel = { kind ->
                         val day = if (yesterday) today.minusDays(1) else today
@@ -201,7 +325,8 @@ fun Nav(graph: AppGraph, engine: EngineState, replay: ReplayViewModel, driving: 
                     }, onBack = ::back)
                 Screen.Settings -> SettingsScreen(SettingsUi(mode, presentation, home != null, deleteDialog, busy,
                     pairing = pairing.copy(driverId = sync.driverId, lastSyncMs = sync.lastSyncMs, presentation = presentation),
-                    alwaysLocation = alwaysLocation),
+                    alwaysLocation = alwaysLocation, sharing = sharing, sharingBusy = familyBusy,
+                    sharingError = familyError, confirmRevoke = revokeDialog),
                     onMode = { selected -> action {
                         graph.setMode(selected); modeName = selected.name
                         DailyWorker.schedule(graph.context, selected)
@@ -209,6 +334,12 @@ fun Nav(graph: AppGraph, engine: EngineState, replay: ReplayViewModel, driving: 
                     } }, onReplay = { replay.start(graph.context, mode, restart = true); route = Screen.Replay.key },
                     onPresentation = graph::setPresentation, onDeleteDialog = { deleteDialog = it },
                     onAlwaysLocation = onAlwaysLocation,
+                    onSharingToggle = ::toggleSharing, onRevokeDialog = { revokeDialog = it },
+                    onRevoke = { familyAction {
+                        graph.carSync.revokeAllShares(); revokeDialog = false
+                        notes = emptyList(); sharing = sharing?.copy(recipients = emptyList())
+                        if (familyAvailable()) sharing = graph.carSync.sharingState()
+                    } },
                     onDelete = { action {
                         replay.end()
                         graph.erasingData = true
@@ -224,6 +355,7 @@ fun Nav(graph: AppGraph, engine: EngineState, replay: ReplayViewModel, driving: 
                         } finally { graph.erasingData = false }
                         birth = ""; firstMode = Mode.CONDITION.name; consent0 = false; consent1 = false; consent2 = false
                         home = null; progress = null; labels = emptyMap(); resets = emptyList(); past = false
+                        todayTripDay = null; dismissedLine = null; restEndMs = null; restFinished = false
                         deleteDialog = false; route = Screen.FirstRun.key
                         onDataCleared()
                     } }, onBack = ::back,

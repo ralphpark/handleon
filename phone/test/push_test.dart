@@ -101,6 +101,8 @@ void main() {
     await t.pump(const Duration(milliseconds: 300));
     expect(find.text(arrivalNotice), findsOneWidget);
     expect(b.feedCalls, before + 1);
+    expect(b.linksCalls, before + 1);
+    expect(b.patternsCalls, before + 1);
   });
   test('Firebase failure is optional and does not escape', () async {
     final client = FakePushClient()..fail = true;

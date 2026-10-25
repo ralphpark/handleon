@@ -6,6 +6,12 @@
 set -u
 SECS=${1:-150}
 VC=http://127.0.0.1:8088
+# 휴대폰 에뮬레이터나 실기기가 함께 연결돼 있어도 Pleos 에뮬레이터에만 보낸다(ANDROID_SERIAL 을 주면 그것을 쓴다).
+if [ -z "${ANDROID_SERIAL:-}" ]; then
+  for s in $(adb devices | awk '/^emulator-[0-9]+\tdevice$/{print $1}'); do
+    [ "$(adb -s "$s" emu avd name 2>/dev/null | head -1 | tr -d '\r')" = "Pleos_Connect_v2_1_0" ] && export ANDROID_SERIAL=$s
+  done
+fi
 adb forward tcp:8088 tcp:8088 >/dev/null
 # 콘솔은 브라우저가 3초마다 보내는 세션 신호가 있어야 차를 움직인다(없으면 emulator_inactive)
 beat() { curl -s -o /dev/null -X POST "$VC/browser/session?client=drive-sh"; }

@@ -50,11 +50,11 @@ export async function linkedPair() {
   ok(await driver.client.rpc("claim_pairing", { p_code: code }));
   return { driver, car };
 }
-export async function sharedPair(scope: Scope, delay: 0 | 3 | 7 | 14) {
+export async function sharedPair(scope: Scope, delay: 0 | 3 | 7 | 14, pattern = false) {
   const pair = await linkedPair();
   const family = await newUser("family");
   const code = ok(
-    await pair.driver.client.rpc("create_invite", { p_scope: scope, p_delay_days: delay }),
+    await pair.driver.client.rpc("create_invite", { p_scope: scope, p_delay_days: delay, p_share_pattern: pattern }),
   );
   ok(await family.client.rpc("accept_invite", { p_code: code }));
   return { ...pair, family };

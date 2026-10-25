@@ -126,4 +126,6 @@ data class LabelsUi(val today: LocalDate, val yesterday: Boolean = false, val se
 data class SettingsUi(val mode: Mode, val presentation: Boolean, val homeRegistered: Boolean,
                       val confirmDelete: Boolean = false, val busy: Boolean = false,
                       val deletionAvailable: Boolean = COLLECTOR_ERASURE_AVAILABLE, val pairing: PairingUi = PairingUi(),
-                      val alwaysLocation: Boolean = false)
+                      val alwaysLocation: Boolean = false,
+                      val sharing: SharingUi? = null, val sharingBusy: Boolean = false,
+                      val sharingError: String? = null, val confirmRevoke: Boolean = false)

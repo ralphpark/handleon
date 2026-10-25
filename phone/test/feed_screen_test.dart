@@ -6,10 +6,31 @@ import 'package:phone/family/summary_card.dart';
 import 'package:phone/share_options.dart';
 
 import 'support/fake_backend.dart';
+import 'support/sharing_fixtures.dart';
 import 'support/harness.dart';
 import 'summary_card_test.dart' as fixtures;
 
 void main() {
+  testWidgets('feed reloads when the app comes back to the foreground', (
+    t,
+  ) async {
+    final b = FakeBackend();
+    await showScreen(t, FamilyHome(backend: b));
+    final before = b.feedCalls;
+    // 알림을 눌러 백그라운드에서 돌아온 경우: 앞에 있을 때 온 푸시가 아니어도 새로 불러온다.
+    for (final state in [
+      AppLifecycleState.inactive,
+      AppLifecycleState.hidden,
+      AppLifecycleState.paused,
+      AppLifecycleState.hidden,
+      AppLifecycleState.inactive,
+      AppLifecycleState.resumed,
+    ]) {
+      t.binding.handleAppLifecycleStateChanged(state);
+    }
+    await t.pumpAndSettle();
+    expect(b.feedCalls, before + 1);
+  });
   testWidgets('empty feed explains delay', (t) async {
     await showScreen(t, FamilyHome(backend: FakeBackend()));
     expect(
@@ -22,6 +43,7 @@ void main() {
     t,
   ) async {
     final b = FakeBackend()
+      ..links = [familyLink()]
       ..feed = [
         FeedRow(
           driverId: 'd',
@@ -40,7 +62,9 @@ void main() {
   testWidgets('failed refresh removes previously visible private detail', (
     t,
   ) async {
-    final b = FakeBackend()..feed = [fixtures.row(ShareScope.detail)];
+    final b = FakeBackend()
+      ..links = [familyLink()]
+      ..feed = [fixtures.row(ShareScope.detail)];
     await showScreen(t, FamilyHome(backend: b));
     b.error = StateError('network failure');
     await t.widget<RefreshIndicator>(find.byType(RefreshIndicator)).onRefresh();
@@ -51,7 +75,9 @@ void main() {
   testWidgets('refresh replaces detail with stage then revoked empty feed', (
     t,
   ) async {
-    final b = FakeBackend()..feed = [fixtures.row(ShareScope.detail)];
+    final b = FakeBackend()
+      ..links = [familyLink()]
+      ..feed = [fixtures.row(ShareScope.detail)];
     await showScreen(t, FamilyHome(backend: b));
     expect(find.text('이번 달 편지'), findsOneWidget);
     b.feed = [fixtures.row(ShareScope.stage)];

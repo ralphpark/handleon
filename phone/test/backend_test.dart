@@ -17,7 +17,7 @@ void main() {
       friendlyError(
         const PostgrestException(message: 'scope_and_timing_required'),
       ),
-      '보여 줄 것과 시점을 둘 다 골라 주세요',
+      '보여 줄 범위와 시점, 운전 패턴 공유 여부를 모두 골라 주세요',
     );
     expect(
       friendlyError(const SocketException('host 192.0.2.1')),
@@ -31,6 +31,7 @@ void main() {
       'family_name': '큰딸',
       'scope': 'trend',
       'delay_days': 7,
+      'share_pattern': false,
     });
     expect(share.familyName, '큰딸');
     expect(share.scope, ShareScope.trend);
@@ -64,6 +65,7 @@ void main() {
         'driver_name': '아버지',
         'scope': 'unknown',
         'delay_days': 7,
+        'share_pattern': false,
       }),
       throwsFormatException,
     );

@@ -26,6 +26,12 @@ internal fun longReport() = LongReport(Stage.TALK,
     mapOf(Domain.MOBILITY to 1.0, Domain.WAYFINDING to 2.0, Domain.OPERATION to 1.0), emptyMap(),
     listOf(Contribution(FeatureId.M1, -2.0, 2.0), Contribution(FeatureId.W3, 3.0, 0.9)), null)
 
+internal fun patternTrip(): TripFeatures {
+    val start = java.time.Instant.parse("2026-10-01T03:00:00Z").toEpochMilli()
+    return TripFeatures(start, start + 60 * 60_000, Source.CAR, 35.0, false, false, false,
+        null, null, false, false, 0.0, 0, 0, 0, 0, 0, null, 0, null, null, 0, 0)
+}
+
 internal class MemoryTrips : TripStore {
     val saved = mutableListOf<TripFeatures>()
     val keys = mutableSetOf<String>()

@@ -61,7 +61,8 @@ class MainActivity : ComponentActivity() {
                     onStart = { mode -> graph.setMode(mode); permissions.launch(RUNTIME_PERMISSIONS) },
                     onRequestPermissions = { permissions.launch(RUNTIME_PERMISSIONS) },
                     onDataCleared = { enableBootCollection(false) },
-                    alwaysLocation = alwaysLocation, onAlwaysLocation = ::requestAlwaysLocation)
+                    alwaysLocation = alwaysLocation, onAlwaysLocation = ::requestAlwaysLocation,
+                    isDriving = { driving })
             }
         }
     }

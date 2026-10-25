@@ -7,12 +7,15 @@ import 'package:phone/driver/invite_screen.dart';
 import 'package:phone/driver/my_summary_screen.dart';
 import 'package:phone/driver/pair_screen.dart';
 import 'package:phone/driver/sharing_screen.dart';
+import 'package:phone/driver/family_preview_screen.dart';
+import 'package:phone/family/note_screen.dart';
 import 'package:phone/family/accept_screen.dart';
 import 'package:phone/family/feed_screen.dart';
 import 'package:phone/share_options.dart';
 import 'package:phone/theme.dart';
 
 import 'support/fake_backend.dart';
+import 'support/sharing_fixtures.dart';
 import 'summary_card_test.dart' as fixtures;
 
 void main() {
@@ -25,6 +28,9 @@ void main() {
     'sharing': (b) => SharingScreen(backend: b),
     'accept': (b) => AcceptScreen(backend: b),
     'family': (b) => FamilyHome(backend: b),
+    'preview': (b) =>
+        FamilyPreviewScreen(backend: b, familyId: 'f', familyName: '큰딸'),
+    'note': (b) => NoteScreen(backend: b, driverId: 'd', driverName: '아버지'),
   };
   for (final scale in [1.0, 2.0]) {
     for (final entry in screens.entries) {
@@ -44,6 +50,7 @@ void main() {
               letter: '이번 달의 운전 이야기예요.',
             ),
           ]
+          ..links = [familyLink()]
           ..feed = [fixtures.row(ShareScope.detail)]
           ..shares = [
             const Share(
@@ -51,8 +58,15 @@ void main() {
               familyName: '가족에게 보일 긴 이름',
               scope: ShareScope.detail,
               timing: ShareTiming.d14,
+              sharePattern: false,
             ),
           ];
+        b.patterns = [pattern()];
+        b.views['f'] = FamilyView(
+          paused: false,
+          feed: b.feed,
+          patterns: b.patterns,
+        );
         await t.pumpWidget(
           MaterialApp(
             theme: darkTheme,

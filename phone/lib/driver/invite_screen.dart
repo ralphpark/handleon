@@ -16,6 +16,7 @@ class InviteScreen extends StatefulWidget {
 class _InviteScreenState extends State<InviteScreen> {
   ShareScope? scope;
   ShareTiming? timing;
+  bool? sharePattern;
   String? code, error;
   bool busy = false;
   Future<void> create() async {
@@ -24,7 +25,11 @@ class _InviteScreenState extends State<InviteScreen> {
       error = null;
     });
     try {
-      final result = await widget.backend.createInvite(scope!, timing!);
+      final result = await widget.backend.createInvite(
+        scope!,
+        timing!,
+        sharePattern!,
+      );
       if (mounted) setState(() => code = result);
     } catch (e) {
       if (mounted) setState(() => error = friendlyError(e));
@@ -38,7 +43,7 @@ class _InviteScreenState extends State<InviteScreen> {
       await Clipboard.setData(
         ClipboardData(
           text:
-              '핸들온에서 내 운전 요약을 함께 살펴봐 주세요. 초대 코드: $code (7일 동안 쓸 수 있어요). ${scope!.label} · ${timing!.label}. 앱에서 가족으로 가입하고 초대 받기에 코드를 넣어 주세요.',
+              '핸들온에서 내 운전 요약을 함께 살펴봐 주세요. 초대 코드: $code (7일 동안 쓸 수 있어요). ${scope!.label} · ${timing!.label} · ${sharePattern! ? '운전 패턴 함께 공유' : '운전 패턴 공유 안 함'}. 앱에서 가족으로 가입하고 초대 받기에 코드를 넣어 주세요.',
         ),
       );
       if (mounted) {
@@ -59,6 +64,7 @@ class _InviteScreenState extends State<InviteScreen> {
       SharePicker(
         scope: scope,
         timing: timing,
+        sharePattern: sharePattern,
         enabled: !busy,
         onScope: (v) => setState(() {
           scope = v;
@@ -68,15 +74,22 @@ class _InviteScreenState extends State<InviteScreen> {
           timing = v;
           code = null;
         }),
+        onPattern: (v) => setState(() {
+          sharePattern = v;
+          code = null;
+        }),
       ),
       if (error != null) Notice(error!),
       PrimaryButton(
-        busy ? '만드는 중이에요' : '초대 만들기',
+        busy ? '만드는 중이에요' : '초대 코드 만들기',
         buttonKey: const Key('createInvite'),
-        onPressed: scope == null || timing == null || busy ? null : create,
+        onPressed:
+            scope == null || timing == null || sharePattern == null || busy
+            ? null
+            : create,
       ),
-      if (scope == null || timing == null)
-        const Muted('보여 줄 것과 시점을 둘 다 골라 주세요'),
+      if (scope == null || timing == null || sharePattern == null)
+        const Muted('보여 줄 범위와 시점, 운전 패턴 공유 여부를 모두 골라 주세요'),
       if (code != null)
         Panel(
           tint: colors(context).brand,
@@ -90,6 +103,7 @@ class _InviteScreenState extends State<InviteScreen> {
                     .copyWith(letterSpacing: 4),
               ),
               Text('${scope!.label} · ${timing!.label}'),
+              Text(sharePattern! ? '운전 패턴도 함께 보여 줘요' : '운전 패턴은 보여 주지 않아요'),
               SecondaryButton('가족에게 보낼 문장 복사', onPressed: copy),
             ], 8),
           ),

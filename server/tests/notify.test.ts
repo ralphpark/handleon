@@ -85,6 +85,7 @@ test("changing delay reschedules pending queues and revoked links create no new 
       p_family_id: family.id,
       p_scope: "stage",
       p_delay_days: 14,
+      p_share_pattern: false,
     }),
   );
   const [q] = await queueFor(family.id);
