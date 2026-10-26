@@ -24,7 +24,7 @@ data class SharingUi(val paused: Boolean, val recipients: List<SharingRecipient>
             return SharingUi(obj.getValue("paused").jsonPrimitive.boolean,
                 obj.getValue("recipients").jsonArray.map { item ->
                     val r = item.jsonObject
-                    SharingRecipient(r.getValue("family_name").jsonPrimitive.content,
+                    SharingRecipient(r.getValue("family_name").jsonPrimitive.contentOrNull ?: "가족",
                         r.getValue("scope").jsonPrimitive.content, r.getValue("delay_days").jsonPrimitive.int,
                         r.getValue("share_pattern").jsonPrimitive.boolean)
                 })
@@ -36,7 +36,7 @@ data class CarNote(val id: Long, val familyName: String, val body: String, val c
     val title: String get() = "$familyName 님의 한마디"
     companion object {
         fun fromJson(value: JsonElement): CarNote = value.jsonObject.let {
-            CarNote(it.getValue("id").jsonPrimitive.long, it.getValue("family_name").jsonPrimitive.content,
+            CarNote(it.getValue("id").jsonPrimitive.long, it.getValue("family_name").jsonPrimitive.contentOrNull ?: "가족",
                 it.getValue("body").jsonPrimitive.content, it.getValue("created_at").jsonPrimitive.content)
         }
     }
