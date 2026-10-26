@@ -31,6 +31,8 @@
   - 가족 화면 행은 `family_feed_for`·`family_patterns_for` 두 내부 함수만 만듭니다. 가족 피드와 운전자의
     `preview_family_view`(가족이 보는 화면)가 같은 함수를 써서 결과가 같습니다.
   - `family_notes`: 가족 → 운전자 한마디(120자, 읽지 않은 것 가족당 3개까지, 90일 뒤 cron 으로 삭제).
+- `0009_revoke_all_ends_invites.sql`: 모두 끊기(`revoke_all_shares`)가 아직 쓰지 않은 초대 코드도 끝냅니다(다시
+  나누려면 새로 초대).
 - `supabase/functions/monthly-letter/index.ts`: 차량 인증 → 편지 생성 → 해당 운전자의 월 요약 저장.
 - `supabase/functions/dispatch-notifications/index.ts`: 서비스 롤 인증 → 큐 조회 → 현재 동의 재확인
   → FCM.
@@ -65,7 +67,7 @@ Deno 2.7.12 의 `check` 에는 `--cached-only` 옵션이 없습니다. 캐시만
 ## 새 프로젝트에 적용하는 순서
 
 1. 승인된 개발용 Supabase 프로젝트에서 익명 로그인 활성화, 이메일 로그인 설정 확인. `0001`부터
-   `0008`까지 순서대로 적용합니다. **아래 SQL 전제와 RLS를 실서버에서 먼저 확인합니다.**
+   `0009`까지 순서대로 적용합니다. **아래 SQL 전제와 RLS를 실서버에서 먼저 확인합니다.**
 2. 로컬 `server/.env.test`에 `.env.test.example`의 세 이름에 대응하는 값을 직접 설정합니다. 이
    파일은 저장소 루트 `.gitignore`에서 이미 제외됩니다. 파일·토큰 내용을 로그에 출력하지 않습니다.
 3. Vault `vault.decrypted_secrets`에 `service_role_key`, `project_url` 이름의 비밀값이 각각 하나씩
