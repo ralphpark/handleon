@@ -18,7 +18,7 @@
 | 파일 | 내용 |
 |---|---|
 | [`apk/HandleOn_핸들온_release.apk`](apk/HandleOn_핸들온_release.apk) | **차량 앱** release 빌드(서명됨). Pleos Connect Emulator 2.1.0 에서 확인 |
-| [`apk/HandleOn_핸들온_휴대폰_release.apk`](apk/HandleOn_핸들온_휴대폰_release.apk) | **휴대폰 앱**(운전자·가족 공용) release 빌드(서명됨, 64비트 ARM 휴대폰·x86_64 에뮬레이터). Android 15 에뮬레이터에서 확인 |
+| [`apk/HandleOn_핸들온_휴대폰_release.apk`](apk/HandleOn_핸들온_휴대폰_release.apk) | **휴대폰 앱**(운전자·가족 공용) release 빌드(서명됨, 64비트 ARM 휴대폰·x86_64 에뮬레이터). Android 15 에뮬레이터와 실기기(갤럭시 Z 폴드2)에서 확인 |
 
 ## 저장소 구성
 
