@@ -3,6 +3,8 @@ package ai.handleon.driveprint
 import java.time.DayOfWeek
 import java.time.LocalDate
 
+internal enum class HolidayKind { LUNAR_NEW_YEAR, CHUSEOK, OTHER }
+
 /**
  * Offline, memory-transcribed 2023–2027 calendar, including known special/election days.
  * Not a live government calendar. See IMPLEMENTATION_REPORT.md for names and verification gaps.
@@ -19,6 +21,28 @@ object KoreanHolidays {
         )
         byYear.forEach { (year, days) ->
             days.split(' ').forEach { add(LocalDate.parse(year.toString() + "-" + it)) }
+        }
+    }
+
+    // Festival central days classify the existing date list; this adds no holidays.
+    private val festivals = mapOf(
+        2023 to ("01-22" to "09-29"),
+        2024 to ("02-10" to "09-17"),
+        2025 to ("01-29" to "10-06"),
+        2026 to ("02-17" to "09-25"),
+        2027 to ("02-07" to "09-15"),
+    ).mapValues { (year, days) ->
+        LocalDate.parse("$year-${days.first}") to LocalDate.parse("$year-${days.second}")
+    }
+
+    internal fun kind(date: LocalDate): HolidayKind? {
+        if (date !in dates) return null
+        val (lunar, chuseok) = festivals.getValue(date.year)
+        // The three festival days and, if present in the list, their substitute day.
+        return when (date) {
+            in lunar.minusDays(1)..lunar.plusDays(2) -> HolidayKind.LUNAR_NEW_YEAR
+            in chuseok.minusDays(1)..chuseok.plusDays(2) -> HolidayKind.CHUSEOK
+            else -> HolidayKind.OTHER
         }
     }
 

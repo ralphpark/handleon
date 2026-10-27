@@ -12,6 +12,36 @@ import kotlinx.serialization.json.*
 import kotlin.test.*
 
 class PersonasTest {
+    @Test fun `new car persona interventions decline`() {
+        val trips = Personas.newCar()
+        val weeks = Adapt.weekly(trips, ZoneId.of("Asia/Seoul"))
+        assertEquals(12, weeks.size)
+        assertTrue(weeks.zipWithNext().all { (a, b) -> a.weekStart.plusWeeks(1) == b.weekStart })
+        val early = weeks.take(3).map { it.lka + it.fca }.average()
+        val late = weeks.takeLast(3).map { it.lka + it.fca }.average()
+        assertTrue(early > 2 * late, "first three=$early, last three=$late")
+        assertTrue(weeks.all { it.per100km != null })
+        assertTrue(trips.all { it.source == Source.SIM && it.endMs > it.startMs && it.lkaEvents >= 0 && it.fcaEvents >= 0 })
+        assertEquals(trips.sortedBy { it.startMs }, trips)
+        assertEquals(trips, Personas.newCar(3))
+        assertEquals(Personas.newCar(4), Personas.newCar(4))
+        assertNotEquals(trips, Personas.newCar(4))
+    }
+
+    @Test fun `new car export uses the versioned replay schema`() {
+        val out = Files.createTempDirectory(File("build").toPath(), "new-car-test-").toFile()
+        try {
+            val file = File(out, "nested/new_car.json")
+            main(arrayOf("--export-new-car", file.path))
+            assertTrue(file.length() in 1L..1_000_000L)
+            val json = file.readText()
+            assertEquals(setOf("version", "persona", "trips"), Json.parseToJsonElement(json).jsonObject.keys)
+            assertEquals(Replay(1, "new_car", Personas.newCar()), Json.decodeFromString<Replay>(json))
+        } finally {
+            out.deleteRecursively()
+        }
+    }
+
     @Test fun fatherReachesTalkInSummer2026() {
         val r = Driveprint().longReport(Personas.father(), emptySet(), emptySet(), YearMonth.of(2026, 10).plusMonths(1).atDay(1))
         assertEquals(Stage.TALK, r.stage)

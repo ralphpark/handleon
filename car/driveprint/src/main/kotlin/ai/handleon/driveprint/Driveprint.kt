@@ -90,7 +90,7 @@ class Driveprint(private val zone: ZoneId = ZoneId.of("Asia/Seoul")) {
 
     fun weeklyReport(
         trips: List<TripFeatures>, labeledDays: Set<LocalDate>, resets: Set<Reset>,
-        today: LocalDate, gate: ForecastGate? = null,
+        today: LocalDate, gate: ForecastGate? = null, effect: (LocalDate) -> Double = { 0.0 },
     ): WeeklyReport {
         val weeklyZone = ZoneId.of("Asia/Seoul")
         fun day(t: TripFeatures) = Instant.ofEpochMilli(t.startMs).atZone(weeklyZone).toLocalDate()
@@ -110,7 +110,7 @@ class Driveprint(private val zone: ZoneId = ZoneId.of("Asia/Seoul")) {
                     (0L..4L).any { KoreanHolidays.isOffDay(from.plusDays(it)) })
             }.toList()
         val applicable = resets.filter { it.day <= today }.toSet()
-        val report = WeeklyTrack.evaluate(weeks, applicable, gate)
+        val report = WeeklyTrack.evaluate(weeks, applicable, gate, effect)
         return if (applicable.any { it.day >= currentWeek }) report.copy(
             status = WeeklyStatus.BUILDING, baselineFrom = null,
             weeksUntilReady = WeeklyTrack.MIN_BASE, top = emptyList()) else report

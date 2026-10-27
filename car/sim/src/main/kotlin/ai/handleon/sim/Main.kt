@@ -20,7 +20,16 @@ private data class Summary(
 fun main(args: Array<String>) {
     require(args.size % 2 == 0) { "Options require values" }
     val options = args.toList().chunked(2).associate { it[0] to it[1] }
-    require(options.keys.all { it in setOf("--drivers", "--months", "--seed", "--out", "--persona", "--search-father-seeds") }) { "Unknown option" }
+    require(options.keys.all { it in setOf("--drivers", "--months", "--seed", "--out", "--persona", "--search-father-seeds", "--export-new-car") }) { "Unknown option" }
+    options["--export-new-car"]?.let { path ->
+        require(options.size == 1) { "New-car replay has fixed parameters" }
+        val file = File(path).absoluteFile
+        val parent = file.parentFile
+        require(parent.isDirectory || parent.mkdirs()) { "Cannot create output directory" }
+        file.writeText(Json.encodeToString(Replay(1, "new_car", Personas.newCar())))
+        println("output=" + file.canonicalPath + " bytes=" + file.length())
+        return
+    }
     options["--search-father-seeds"]?.let { value ->
         require(options.size == 1) { "Seed search only accepts --search-father-seeds" }
         val lastSeed = value.toLong()

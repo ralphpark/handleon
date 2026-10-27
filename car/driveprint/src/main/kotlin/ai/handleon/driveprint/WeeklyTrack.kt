@@ -2,6 +2,7 @@ package ai.handleon.driveprint
 
 import java.time.LocalDate
 import kotlinx.serialization.Serializable
+import kotlin.math.abs
 
 @Serializable enum class WeeklyStatus { BUILDING, OK, FLAGGED }
 @Serializable data class WeekResult(
@@ -26,7 +27,8 @@ object WeeklyTrack {
     const val COOLDOWN_WEEKS = 4
     const val THRESHOLD_SCALE = 1.0
 
-    fun evaluate(weeks: List<WeekInput>, resets: Set<Reset> = emptySet(), gate: ForecastGate? = null): WeeklyReport {
+    fun evaluate(weeks: List<WeekInput>, resets: Set<Reset> = emptySet(), gate: ForecastGate? = null,
+                 effect: (LocalDate) -> Double = { 0.0 }): WeeklyReport {
         val ordered = weeks.sortedBy { it.weekStart }
         require(ordered.map { it.weekStart }.distinct().size == ordered.size) { "One input per week is required" }
         val baseline = mutableListOf<WeekInput>()
@@ -69,7 +71,7 @@ object WeeklyTrack {
                 input.values[f]?.let { f to Stats.z(it, b) }
             }.toMap()
             fun changes(z: Map<FeatureId, Double>) = z.mapValues { (f, value) -> Scoring.change(f, value) }
-            val held = week.labeled || week.holiday || mixedResetWeek
+            val held = week.labeled || week.holiday || mixedResetWeek || abs(effect(week.weekStart)) >= 0.2
             val z = if (held) emptyMap() else raw(week)
             val changed = changes(z)
             val calibration = baseline.map { changes(raw(it)) }
