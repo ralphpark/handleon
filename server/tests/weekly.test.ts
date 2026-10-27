@@ -223,3 +223,14 @@ integrationTest("the weekly window advances exactly at Monday midnight KST", asy
     assertEquals(ok(await admin.rpc("kst_week_start", { p_at })), expected);
   }
 });
+
+integrationTest("quiet weeks upload without domains but flagged weeks need one", async () => {
+  const { car, driver } = await sharedPair("stage", 0);
+  ok(
+    await car.client.from("weekly_changes").upsert(
+      change(driver.id, { flagged: false, domains: [], top: [] }),
+    ),
+  );
+  const bad = await car.client.from("weekly_changes").upsert(change(driver.id, { domains: [] }));
+  assert(bad.error, "flagged week without a domain must be rejected");
+});

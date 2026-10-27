@@ -241,3 +241,19 @@ integrationTest("late expired evening uploads cannot queue behind today's digest
   // Still show the legitimate historical record in the 14-day feed.
   assertEquals(ok(await family.client.rpc("get_family_drive_events")).length, 1);
 });
+
+integrationTest("car stops drive-done notices for every family at once", async () => {
+  const { driver, car, family } = await sharedPair("stage", 0);
+  ok(await driver.client.rpc("set_share_options", choice(family.id)));
+  ok(await car.client.rpc("report_drive_end", args()));
+  assertEquals((await pending(driver.id)).length, 1);
+  assertEquals(ok(await car.client.rpc("stop_drive_notices")), 1);
+  assertEquals((await pending(driver.id)).length, 0);
+  const [recipient] = ok(await car.client.rpc("get_sharing_state")).recipients;
+  assertEquals(recipient.drive_done, null);
+  const stranger = await newCar();
+  assertEquals(
+    (await stranger.client.rpc("stop_drive_notices")).error?.message,
+    "driver_or_car_required",
+  );
+});

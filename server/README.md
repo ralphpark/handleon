@@ -37,6 +37,7 @@
 - `0011_share_options_drive_events.sql`: 받는 사람별 새 공유 선택(기본 꺼짐), 위치 없는 나들이 종료 집계,
   종류별 알림 큐. `drive_done`은 마지막 종료 30분 뒤, `drive_evening`은 KST 20시에 보냅니다.
 - `0012_weekly_changes_habits.sql`: 주간 변화·습관 집계, 가족용 최근 12주 조회와 `weekly_change` 알림.
+- `0013_weekly_quiet_weeks_stop_drive.sql`: 평소와 같은 주는 영역 없이 올릴 수 있음(표시된 주는 영역 1개 이상), 차가 모든 가족의 운전 마침 소식을 한 번에 끄는 `stop_drive_notices()`.
   두 마이그레이션은 파일만 작성했으며 원격 적용·통합 검증은 아직 하지 않았습니다.
 - `supabase/functions/monthly-letter/index.ts`: 차량 인증 → 편지 생성 → 해당 운전자의 월 요약 저장.
 - `supabase/functions/dispatch-notifications/index.ts`: 서비스 롤 인증 → 큐 조회 → 현재 동의 재확인
@@ -123,7 +124,7 @@ DENO_DIR=../.cache/deno deno test -A --frozen --cached-only tests/
 ## 새 프로젝트에 적용하는 순서
 
 1. 승인된 개발용 Supabase 프로젝트에서 익명 로그인 활성화, 이메일 로그인 설정 확인. `0001`부터
-   `0012`까지 순서대로 적용합니다. **아래 SQL 전제와 RLS를 실서버에서 먼저 확인합니다.**
+   `0013`까지 순서대로 적용합니다. **아래 SQL 전제와 RLS를 실서버에서 먼저 확인합니다.**
 2. 로컬 `server/.env.test`에 `.env.test.example`의 세 이름에 대응하는 값을 직접 설정합니다. 이
    파일은 저장소 루트 `.gitignore`에서 이미 제외됩니다. 파일·토큰 내용을 로그에 출력하지 않습니다.
 3. Vault `vault.decrypted_secrets`에 `service_role_key`, `project_url` 이름의 비밀값이 각각 하나씩
