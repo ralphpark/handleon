@@ -10,6 +10,14 @@ import 'support/fake_backend.dart';
 import 'support/harness.dart';
 
 void main() {
+  testWidgets('import screen explains a child can help', (t) async {
+    await showScreen(t, ImportScreen(backend: FakeBackend()));
+    expect(
+      find.text('자녀분이 대신 해 드려도 돼요. 휴대폰 설정 → 위치 → 타임라인 → 내보내기 순서예요.'),
+      findsOneWidget,
+    );
+    expect(find.text('가져온 기록은 월간 비교에만 써요'), findsOneWidget);
+  });
   test('large imports produce only contract A keys and bounded files', () {
     final trip = TimelineParser.parse(
       File('test/fixtures/timeline_ondevice.json').readAsStringSync(),

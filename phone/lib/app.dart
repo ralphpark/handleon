@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import 'auth/auth_screen.dart';
 import 'backend.dart';
+import 'driver/clinic_screen.dart';
 import 'driver/invite_screen.dart';
 import 'driver/import_screen.dart';
 import 'driver/my_summary_screen.dart';
@@ -110,6 +111,7 @@ class _AppRouterState extends State<AppRouter> {
       return switch (path) {
         '/driver/pair' => PairScreen(backend: b),
         '/driver/import' => ImportScreen(backend: b),
+        '/driver/clinic' => ClinicScreen(backend: b),
         '/driver/invite' => InviteScreen(backend: b),
         '/driver/sharing' => SharingScreen(backend: b),
         _ => DriverHome(backend: b),

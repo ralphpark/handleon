@@ -4,6 +4,7 @@ import 'package:phone/backend.dart';
 import 'package:phone/share_options.dart';
 
 import 'coach_fixtures.dart';
+import 'clinic_fixtures.dart';
 
 class FakeBackend implements Backend {
   FakeBackend({this.role, this.userId, this.displayName = '내 이름'});
@@ -58,6 +59,20 @@ class FakeBackend implements Backend {
   Object? coachError;
   Completer<CoachAdvice>? pendingCoach;
   final coachCalls = <String>[];
+  ClinicSummary? clinicResult;
+  Object? clinicError;
+  Completer<ClinicSummary>? pendingClinic;
+  int clinicCalls = 0;
+
+  @override
+  Future<ClinicSummary> clinicSummary() async {
+    clinicCalls++;
+    check();
+    if (clinicError != null) throw clinicError!;
+    return pendingClinic?.future ??
+        clinicResult ??
+        ClinicSummary.fromJson(clinicJson());
+  }
 
   @override
   Future<CoachAdvice> coach(String driverId) async {

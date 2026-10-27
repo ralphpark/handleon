@@ -94,12 +94,16 @@ void main() {
             .listSync(recursive: true)
             .whereType<File>()
             .where((f) => f.path.endsWith('.dart'))) {
-      for (final word in banned) {
-        expect(
-          file.readAsStringSync(),
-          isNot(contains(word)),
-          reason: file.path,
+      var source = file.readAsStringSync();
+      // P5's exact fixed footer is the only approved exception.
+      if (file.path == 'lib/driver/clinic_pdf.dart') {
+        source = source.replaceAll(
+          '이 자료는 진단이 아니에요. 운전 기록의 변화를 쉬운 말로 정리한 참고 자료예요.',
+          '',
         );
+      }
+      for (final word in banned) {
+        expect(source, isNot(contains(word)), reason: file.path);
       }
     }
   });

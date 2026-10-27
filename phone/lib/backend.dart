@@ -55,6 +55,7 @@ abstract class Backend {
   Future<List<WeeklyChange>> familyWeekly();
   Future<List<WeeklyHabit>> familyHabits();
   Future<CoachAdvice> coach(String driverId);
+  Future<ClinicSummary> clinicSummary();
   Future<List<PatternRow>> familyPatterns();
   Future<List<FamilyLink>> familyLinks();
   Future<int> sendNote(String driverId, String body);
@@ -434,6 +435,42 @@ class WeeklyHabit {
   }
 }
 
+enum ClinicError implements Exception { unavailable }
+
+class ClinicSummary {
+  const ClinicSummary({
+    required this.summary,
+    required this.questions,
+    required this.fromFallback,
+  });
+  final String summary;
+  final List<String> questions;
+  final bool fromFallback;
+
+  factory ClinicSummary.fromJson(Object? value) {
+    String sentence(Object? raw, int maximum) {
+      if (raw is! String || raw.trim().isEmpty || raw.runes.length > maximum) {
+        throw ClinicError.unavailable;
+      }
+      return raw;
+    }
+
+    if (value is! Map<String, dynamic> ||
+        (value['source'] != 'ai' && value['source'] != 'fallback')) {
+      throw ClinicError.unavailable;
+    }
+    final questions = value['questions'];
+    if (questions is! List || questions.length != 3) {
+      throw ClinicError.unavailable;
+    }
+    return ClinicSummary(
+      summary: sentence(value['summary'], 600),
+      questions: List.unmodifiable(questions.map((q) => sentence(q, 80))),
+      fromFallback: value['source'] == 'fallback',
+    );
+  }
+}
+
 class CoachAdvice {
   const CoachAdvice({
     required this.openers,
@@ -679,7 +716,10 @@ String friendlyError(Object error) {
 }
 
 class SupabaseBackend implements Backend {
-  SupabaseBackend(this.client) {
+  SupabaseBackend(
+    this.client, {
+    this.clinicTimeout = const Duration(seconds: 45),
+  }) {
     _pushTokens = DevicePushTokens(
       registerToken: (token, platform) async {
         await client.rpc(
@@ -709,6 +749,7 @@ class SupabaseBackend implements Backend {
     });
   }
   final SupabaseClient client;
+  final Duration clinicTimeout;
   late final DevicePushTokens _pushTokens;
   final _events = StreamController<void>.broadcast();
   late final StreamSubscription<AuthState> _subscription;
@@ -918,6 +959,26 @@ class SupabaseBackend implements Backend {
       return CoachAdvice.fromJson(response.data);
     } catch (error) {
       throw CoachError.fromError(error);
+    }
+  }
+
+  @override
+  Future<ClinicSummary> clinicSummary() async {
+    final abort = Completer<void>();
+    try {
+      final response = await client.functions
+          .invoke('clinic-summary', body: {}, abortSignal: abort.future)
+          .timeout(
+            clinicTimeout,
+            onTimeout: () {
+              abort.complete();
+              throw ClinicError.unavailable;
+            },
+          );
+      if (response.status != 200) throw ClinicError.unavailable;
+      return ClinicSummary.fromJson(response.data);
+    } catch (_) {
+      throw ClinicError.unavailable;
     }
   }
 

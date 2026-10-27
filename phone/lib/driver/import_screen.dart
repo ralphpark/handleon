@@ -165,6 +165,8 @@ class _ImportScreenState extends State<ImportScreen> {
     backLabel: '내 운전 요약',
     subtitle: '핸들온을 쓰기 전의 운전도 기준에 넣을 수 있어요. 차로 이동한 기록만 골라 차에 보내요.',
     children: [
+      const Text('자녀분이 대신 해 드려도 돼요. 휴대폰 설정 → 위치 → 타임라인 → 내보내기 순서예요.'),
+      const Muted('가져온 기록은 월간 비교에만 써요'),
       Panel(
         child: Column(
           children: spaced([

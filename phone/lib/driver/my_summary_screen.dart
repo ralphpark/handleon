@@ -115,6 +115,7 @@ class _DriverHomeState extends State<DriverHome> {
         '/driver/pair',
       ),
       menu('지난 운전 기록 가져오기', '구글 지도 타임라인 파일', '/driver/import'),
+      menu('진료·상담용 한 장', '최근 생활 변화와 물어볼 질문', '/driver/clinic'),
       menu(
         '가족 공유 관리',
         shareCount == null ? '확인 중' : '$shareCount명에게 공유 중',
