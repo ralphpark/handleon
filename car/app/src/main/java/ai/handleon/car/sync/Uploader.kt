@@ -64,40 +64,46 @@ fun letterBody(row: JsonObject, report: LongReport): JsonObject = buildJsonObjec
 }
 
 class Uploader(private val client: SupabaseClient) {
-    suspend fun uploadWeeklyChanges(driverId: String, report: ai.handleon.driveprint.WeeklyReport, source: String) =
-        uploadWeeklyChanges(weeklyChangeRows(driverId, report, source))
-    suspend fun uploadWeeklyChanges(rows: JsonArray) {
-        if (rows.isNotEmpty()) client.upsert("weekly_changes", rows, "driver_id,week_start")
+    suspend fun uploadWeeklyChanges(driverId: String, report: ai.handleon.driveprint.WeeklyReport, source: String,
+                                    allowed: () -> Boolean = { true }) =
+        uploadWeeklyChanges(weeklyChangeRows(driverId, report, source), allowed)
+    suspend fun uploadWeeklyChanges(rows: JsonArray, allowed: () -> Boolean = { true }) {
+        if (rows.isNotEmpty()) client.upsert("weekly_changes", rows, "driver_id,week_start", allowed)
     }
-    suspend fun uploadWeeklyHabits(driverId: String, weeks: List<Pair<ai.handleon.driveprint.HabitSummary, List<ai.handleon.driveprint.PromiseResult>>>, source: String) =
-        uploadWeeklyHabits(weeklyHabitRows(driverId, weeks, source))
-    suspend fun uploadWeeklyHabits(rows: JsonArray) {
-        if (rows.isNotEmpty()) client.upsert("weekly_habits", rows, "driver_id,week_start")
+    suspend fun uploadWeeklyHabits(driverId: String, weeks: List<Pair<ai.handleon.driveprint.HabitSummary, List<ai.handleon.driveprint.PromiseResult>>>, source: String,
+                                   allowed: () -> Boolean = { true }) =
+        uploadWeeklyHabits(weeklyHabitRows(driverId, weeks, source), allowed)
+    suspend fun uploadWeeklyHabits(rows: JsonArray, allowed: () -> Boolean = { true }) {
+        if (rows.isNotEmpty()) client.upsert("weekly_habits", rows, "driver_id,week_start", allowed)
     }
     suspend fun reportOuting(outing: ai.handleon.driveprint.Outing) {
         client.rpc("report_drive_end", DriveNotices.reportBody(outing))
     }
-    suspend fun uploadPatterns(driverId: String, months: List<PatternMonth>, source: String) {
+    suspend fun uploadPatterns(driverId: String, months: List<PatternMonth>, source: String, allowed: () -> Boolean = { true }) {
         val rows = patternRows(driverId, months, source)
-        if (rows.isNotEmpty()) client.upsert("monthly_patterns", rows, "driver_id,month")
+        if (rows.isNotEmpty()) client.upsert("monthly_patterns", rows, "driver_id,month", allowed)
     }
-    suspend fun upload(driverId: String, report: LongReport, mode: Mode, source: String): JsonObject? {
+    suspend fun upload(driverId: String, report: LongReport, mode: Mode, source: String, allowed: () -> Boolean = { true }): JsonObject? {
         val row = monthRow(driverId, report, mode, source) ?: return null
-        client.upsert("monthly_summaries", JsonArray(listOf(row)), "driver_id,month")
+        client.upsert("monthly_summaries", JsonArray(listOf(row)), "driver_id,month", allowed)
         return row
     }
     suspend fun upload(driverId: String, report: ConditionReport) {
         val rows = dayRows(driverId, report)
         if (rows.isNotEmpty()) client.upsert("daily_conditions", rows, "driver_id,day")
     }
-    suspend fun letterFor(driverId: String, row: JsonObject, report: LongReport): String? = try {
-        val month = row.getValue("month").jsonPrimitive.content
-        val existing = client.select("monthly_summaries", "select=letter&driver_id=eq.$driverId&month=eq.$month")
-            .firstOrNull()?.jsonObject?.get("letter")?.jsonPrimitive?.contentOrNull?.takeIf(String::isNotBlank)
-        existing ?: if (row.getValue("stage").jsonPrimitive.content == "building") null
-            else client.invoke("monthly-letter", letterBody(row, report))["letter"]?.jsonPrimitive?.contentOrNull?.takeIf(String::isNotBlank)
-    } catch (cancelled: CancellationException) { throw cancelled }
-    catch (_: Exception) { null }
+    suspend fun letterFor(driverId: String, row: JsonObject, report: LongReport, allowed: () -> Boolean = { true }): String? {
+        if (!allowed()) return null
+        return try {
+            val month = row.getValue("month").jsonPrimitive.content
+            val existing = client.select("monthly_summaries", "select=letter&driver_id=eq.$driverId&month=eq.$month", allowed)
+                .firstOrNull()?.jsonObject?.get("letter")?.jsonPrimitive?.contentOrNull?.takeIf(String::isNotBlank)
+            existing ?: if (!allowed() || row.getValue("stage").jsonPrimitive.content == "building") null
+                else client.invoke("monthly-letter", letterBody(row, report), allowed)["letter"]?.jsonPrimitive?.contentOrNull?.takeIf(String::isNotBlank)
+        } catch (cancelled: CancellationException) { throw cancelled }
+        catch (aborted: RequestAbortedException) { throw aborted }
+        catch (_: Exception) { null }
+    }
 }
 
 /** Engine excluded means excluded from baseline learning, so a flagged result is still publishable. */

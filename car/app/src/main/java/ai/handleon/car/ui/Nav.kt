@@ -482,7 +482,8 @@ fun Nav(graph: AppGraph, engine: EngineState, replay: ReplayViewModel, driving: 
                         graph.setPromises(values); selectedPromises = values; SyncWorker.enqueue(graph.context)
                     }
                 }, ::back)
-                Screen.Replay -> ReplayScreen(replayUi, replay::pause, { replay.end(); route = Screen.Settings.key }, ::openCenter)
+                Screen.Replay -> ReplayScreen(replayUi, replay::pause, { replay.end(); route = Screen.Settings.key }, ::openCenter,
+                    onPersona = { persona -> if (parkedAndResumed()) replay.start(graph.context, mode, restart = true, persona = persona) })
                 Screen.DevEngine -> {
                     val live by CollectorService.live.collectAsStateWithLifecycle()
                     DevEngineScreen(DevEngineUi.from(live), ::back, gleoPanel = {

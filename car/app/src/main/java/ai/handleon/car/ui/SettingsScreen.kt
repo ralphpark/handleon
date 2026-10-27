@@ -66,7 +66,7 @@ private fun SettingsRows(ui: SettingsUi, onMode: (Mode) -> Unit, onReplay: () ->
     SettingRow("집 위치", if (ui.homeRegistered) "내비 즐겨찾기 '집'에서 가져왔어요" else "내비 즐겨찾기에 집을 등록해 주세요") {
         Text(if (ui.homeRegistered) "등록됨" else "미등록", style = MaterialTheme.typography.labelLarge, color = if (ui.homeRegistered) DarkTokens.brand else DarkTokens.inkMuted)
     }
-    SettingRow("24개월을 60초로 보기", "가상 인물의 운전 변화를 살펴봐요") { PillButton("재생", onReplay, kind = PillKind.REPLAY, enabled = !ui.busy) }
+    SettingRow("운전 이야기 재생", "아버지 · 새 차 · 갑작스러운 변화 · 모의") { PillButton("재생", onReplay, kind = PillKind.REPLAY, enabled = !ui.busy) }
     SettingRow("발표 모드", "시연용 설정을 저장해요") {
         Row(Modifier.heightIn(min = 64.dp).semantics { toggleableState = if (ui.presentation) ToggleableState.On else ToggleableState.Off }
             .midnightClick(!ui.busy, Role.Switch) { onPresentation(!ui.presentation) }, verticalAlignment = Alignment.CenterVertically,

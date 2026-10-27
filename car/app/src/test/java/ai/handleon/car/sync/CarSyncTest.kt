@@ -116,7 +116,8 @@ class CarSyncTest {
         state.setDriver("driver"); presentation = true
         server.reply("""[{"driver_id":"driver"}]"""); server.reply("", 201)
         server.reply("""[{"letter":"재생 편지"}]"""); server.reply("", 201)
-        sync().uploadReplay(longReport(), listOf(patternTrip()))
+        server.reply("", 201)
+        sync().uploadReplay(longReport(), listOf(patternTrip().copy(source = Source.SIM)))
         repeat(3) { server.takeRequest() }
         val request = server.takeRequest()
         assertEquals("/rest/v1/monthly_patterns", request.requestUrl!!.encodedPath)
@@ -124,6 +125,7 @@ class CarSyncTest {
         assertEquals("replay", row["source"]!!.jsonPrimitive.content)
         assertEquals("2026-10-01", row["month"]!!.jsonPrimitive.content)
         assertFalse(row["partial"]!!.jsonPrimitive.boolean)
+        assertEquals("/rest/v1/weekly_habits", server.takeRequest().requestUrl!!.encodedPath)
         assertTrue(repo.trips().isEmpty())
     }
 
@@ -238,7 +240,8 @@ class CarSyncTest {
         assertEquals(0, server.requestCount)
         state.setDriver("driver")
         server.reply("""[{"driver_id":"driver"}]"""); server.reply("", 201); server.reply("""[{"letter":"재생 편지"}]""")
-        sync.uploadReplay(longReport(), emptyList())
+        server.reply("", 201); server.reply("", 201)
+        sync.uploadReplay(longReport(), listOf(patternTrip().copy(source = Source.SIM)))
         server.takeRequest()
         val row = Json.parseToJsonElement(server.takeRequest().body.readUtf8()).jsonArray.single().jsonObject
         assertEquals("replay", row["source"]!!.jsonPrimitive.content)

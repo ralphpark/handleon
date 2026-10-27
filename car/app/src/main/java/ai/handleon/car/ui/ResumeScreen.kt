@@ -27,7 +27,7 @@ fun ResumeScreen(ui: ResumeUi, onBack: () -> Unit, onPromises: () -> Unit) {
 }
 
 @Composable
-private fun AdaptationChart(weeks: List<AdaptWeek>) {
+internal fun AdaptationChart(weeks: List<AdaptWeek>) {
     val bars = adaptationBars(weeks)
     val maximum = bars.mapNotNull { it.per100km }.maxOrNull()?.coerceAtLeast(1.0) ?: 1.0
     Row(Modifier.fillMaxWidth().height(190.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {

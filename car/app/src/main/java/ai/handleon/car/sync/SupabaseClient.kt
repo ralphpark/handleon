@@ -17,6 +17,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
 data class Session(val userId: String, val accessToken: String, val refreshToken: String, val expiresAtSec: Long)
 interface TokenStore { fun load(): Session?; fun save(session: Session?) }
 class SupabaseException(val status: Int, val code: String?) : Exception("supabase $status ${code ?: ""}")
+internal class RequestAbortedException : Exception()
 
 /** Only projected identifiers leave this boundary as errors; never attach a response or cause. */
 class SupabaseClient(
@@ -33,22 +34,23 @@ class SupabaseClient(
 
     suspend fun ensureSession(): String = currentSession().userId
 
-    private suspend fun currentSession(): Session = sessionMutex.withLock {
+    private suspend fun currentSession(allowed: () -> Boolean = { true }): Session = sessionMutex.withLock {
+        checkAllowed(allowed)
         if (!configured) throw SupabaseException(0, "not_configured")
         val saved = tokens.load()
         when {
-            saved == null -> authenticate(null)
-            saved.expiresAtSec <= nowSec() + 60 -> authenticate(saved)
+            saved == null -> authenticate(null, allowed)
+            saved.expiresAtSec <= nowSec() + 60 -> authenticate(saved, allowed)
             else -> saved
         }
     }
 
-    private suspend fun authenticate(previous: Session?): Session {
+    private suspend fun authenticate(previous: Session?, allowed: () -> Boolean): Session {
         val url = if (previous == null) url("auth/v1/signup")
             else url("auth/v1/token").newBuilder().addQueryParameter("grant_type", "refresh_token").build()
         val body = buildJsonObject { previous?.let { put("refresh_token", it.refreshToken) } }
         val reply = execute(Request.Builder().url(url).header("apikey", anonKey)
-            .post(body.toString().toRequestBody(mediaType)).build())
+            .post(body.toString().toRequestBody(mediaType)).build(), allowed)
         if (reply.status !in 200..299) {
             val error = failure(reply, previous)
             if (previous != null && reply.status in listOf(400, 401)) tokens.save(null)
@@ -71,16 +73,16 @@ class SupabaseClient(
         return if (reply.body.isBlank()) JsonNull else parse(reply)
     }
 
-    suspend fun select(table: String, query: String): JsonArray =
-        parse(authorized("GET", url("rest/v1/$table").newBuilder().encodedQuery(query).build())).arrayOrFail()
+    suspend fun select(table: String, query: String, allowed: () -> Boolean = { true }): JsonArray =
+        parse(authorized("GET", url("rest/v1/$table").newBuilder().encodedQuery(query).build(), allowed = allowed)).arrayOrFail()
 
-    suspend fun upsert(table: String, rows: JsonArray, onConflict: String) {
+    suspend fun upsert(table: String, rows: JsonArray, onConflict: String, allowed: () -> Boolean = { true }) {
         authorized("POST", url("rest/v1/$table").newBuilder().addQueryParameter("on_conflict", onConflict).build(), rows,
-            "resolution=merge-duplicates,return=minimal")
+            "resolution=merge-duplicates,return=minimal", allowed)
     }
 
-    suspend fun invoke(fn: String, body: JsonObject): JsonObject =
-        parse(authorized("POST", url("functions/v1/$fn"), body)).objectOrFail()
+    suspend fun invoke(fn: String, body: JsonObject, allowed: () -> Boolean = { true }): JsonObject =
+        parse(authorized("POST", url("functions/v1/$fn"), body, allowed = allowed)).objectOrFail()
 
     suspend fun listObjects(bucket: String, prefix: String): List<String> {
         val paths = mutableListOf<String>()
@@ -112,27 +114,35 @@ class SupabaseClient(
     private fun url(path: String): HttpUrl = (base ?: throw SupabaseException(0, "not_configured"))
         .newBuilder().apply { path.split('/').filter(String::isNotEmpty).forEach(::addPathSegment) }.build()
 
-    private suspend fun authorized(method: String, url: HttpUrl, body: JsonElement? = null, prefer: String? = null): Reply {
-        var session = currentSession()
+    private suspend fun authorized(method: String, url: HttpUrl, body: JsonElement? = null,
+                                   prefer: String? = null, allowed: () -> Boolean = { true }): Reply {
+        var session = currentSession(allowed)
         repeat(2) { attempt ->
+            checkAllowed(allowed)
             val request = Request.Builder().url(url).header("apikey", anonKey)
                 .header("Authorization", "Bearer ${session.accessToken}")
                 .apply { prefer?.let { header("Prefer", it) } }
                 .method(method, body?.toString()?.toRequestBody(mediaType)).build()
-            val reply = execute(request)
+            val reply = execute(request, allowed)
             if (reply.status in 200..299) return reply
             if (reply.status != 401 || attempt == 1) throw failure(reply, session)
             session = sessionMutex.withLock {
+                checkAllowed(allowed)
                 val saved = tokens.load() ?: throw failure(reply, session)
-                if (saved.accessToken != session.accessToken) saved else authenticate(saved)
+                if (saved.accessToken != session.accessToken) saved else authenticate(saved, allowed)
             }
         }
         throw SupabaseException(401, null)
     }
 
     private data class Reply(val status: Int, val body: String)
-    private suspend fun execute(request: Request): Reply = withContext(Dispatchers.IO) {
+    private fun checkAllowed(allowed: () -> Boolean) {
+        if (!allowed()) throw RequestAbortedException()
+    }
+    private suspend fun execute(request: Request, allowed: () -> Boolean = { true }): Reply = withContext(Dispatchers.IO) {
         ensureActive()
+        // Dispatch can follow an authentication wait, a 401, or an IO dispatcher switch.
+        checkAllowed(allowed)
         try {
             http.newCall(request).execute().use { response -> Reply(response.code, response.body?.string().orEmpty()) }
         } catch (_: IOException) { throw SupabaseException(0, "network_error") }

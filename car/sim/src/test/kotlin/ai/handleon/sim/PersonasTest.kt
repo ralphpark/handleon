@@ -12,6 +12,17 @@ import kotlinx.serialization.json.*
 import kotlin.test.*
 
 class PersonasTest {
+    @Test fun `sudden export uses the versioned replay schema and fixed persona`() {
+        val out = Files.createTempDirectory(File("build").toPath(), "sudden-test-").toFile()
+        try {
+            val file = File(out, "nested/sudden.json")
+            main(arrayOf("--export-sudden", file.path))
+            val json = file.readText()
+            assertEquals(setOf("version", "persona", "trips"), Json.parseToJsonElement(json).jsonObject.keys)
+            assertEquals(Replay(1, "sudden", Personas.sudden()), Json.decodeFromString<Replay>(json))
+            assertTrue(file.length() in 1L..1_000_000L)
+        } finally { out.deleteRecursively() }
+    }
     @Test fun `new car persona interventions decline`() {
         val trips = Personas.newCar()
         val weeks = Adapt.weekly(trips, ZoneId.of("Asia/Seoul"))

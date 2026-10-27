@@ -207,23 +207,60 @@ class CarSync(
     }
 
     /** Called only after playback has emitted its final frame; presentation is checked here too. */
-    suspend fun uploadReplay(report: LongReport, trips: List<TripFeatures>) = mutex.withLock {
-        if (!presentation()) return@withLock
-        val driver = connectedDriver() ?: return@withLock
-        uploadMonth(driver, report, "replay")
-        trips.maxOfOrNull { it.startMs }?.let { last ->
-            val today = YearMonth.from(Instant.ofEpochMilli(last).atZone(zone)).plusMonths(1).atDay(1)
-            // Include six completed replay months, not a fabricated empty current month.
-            val months = Patterns.monthly(trips, report, zone, today, months = 7).filterNot { it.partial }
-            uploader.uploadPatterns(driver, months, "replay")
-        }
-        state.markSynced(driver, nowMs())
+    suspend fun uploadReplay(report: LongReport, trips: List<TripFeatures>, today: LocalDate? = null,
+                             canUpload: () -> Boolean = { true }): Boolean {
+        val requestedDriver = state.driverId ?: return false
+        val connection = state.connectionGeneration
+        val job = kotlinx.coroutines.currentCoroutineContext()[kotlinx.coroutines.Job]
+        fun allowed() = presentation() && canUpload() && job?.isActive != false &&
+            state.driverId == requestedDriver && state.connectionGeneration == connection
+        if (!allowed() || !client.configured || trips.isEmpty()) return false
+        require(trips.all { it.source == Source.SIM }) { "모의 기록만 보낼 수 있어요" }
+        return try { mutex.withLock {
+            if (!allowed()) return@withLock false
+            val driver = connectedDriver(::allowed) ?: return@withLock false
+            if (!allowed() || driver != requestedDriver) return@withLock false
+            val last = trips.maxOf { it.endMs }
+            val asOf = today ?: YearMonth.from(Instant.ofEpochMilli(last).atZone(zone)).plusMonths(1).atDay(1)
+            val cutoff = asOf.atStartOfDay(zone).toInstant().toEpochMilli()
+            val selected = trips.filter { it.startMs < cutoff && it.endMs < cutoff }
+            if (selected.isEmpty()) return@withLock false
+            if (!uploadMonth(driver, report, "replay", ::allowed)) return@withLock false
+            if (!allowed()) return@withLock false
+            val months = Patterns.monthly(selected, report, zone, asOf, months = 7).filterNot { it.partial }
+            uploader.uploadPatterns(driver, months, "replay", ::allowed)
+            if (!allowed()) return@withLock false
+            val weekly = withContext(Dispatchers.Default) {
+                ai.handleon.driveprint.Driveprint().weeklyReport(selected, emptySet(), emptySet(), asOf)
+            }
+            if (!allowed()) return@withLock false
+            uploader.uploadWeeklyChanges(driver, weekly, "replay", ::allowed)
+            if (!allowed()) return@withLock false
+            fun week(ms: Long): LocalDate {
+                val day = Instant.ofEpochMilli(ms).atZone(zone).toLocalDate()
+                return day.minusDays(day.dayOfWeek.value - 1L)
+            }
+            val latest = week(selected.maxOf { it.startMs })
+            val first = week(selected.minOf { it.startMs }).coerceAtLeast(latest.minusWeeks(7))
+            val outings = Outings.group(selected, cutoff - 1)
+            val habits = generateSequence(first) { it.plusWeeks(1) }.takeWhile { it <= latest }.map { from ->
+                // Replay has no real driver's promises, labels, or model. Never read them from the repository.
+                Habits.summary(selected, outings, from, from.plusWeeks(1), zone) to emptyList<ai.handleon.driveprint.PromiseResult>()
+            }.toList()
+            if (!allowed()) return@withLock false
+            uploader.uploadWeeklyHabits(driver, habits, "replay", ::allowed)
+            if (!allowed()) return@withLock false
+            state.markSynced(driver, nowMs())
+            true
+        } } catch (_: RequestAbortedException) { false }
     }
 
-    private suspend fun connectedDriver(): String? {
-        if (!client.configured || state.driverId == null) return null
+    private suspend fun connectedDriver(allowed: () -> Boolean = { true }): String? {
+        if (!allowed() || !client.configured || state.driverId == null) return null
         client.ensureSession()
+        if (!allowed()) return null
         val driver = pairing.linkedDriver()
+        if (!allowed()) return null
         if (driver != state.driverId) {
             state.setDriver(driver)
             repo.saveReport("LETTER", "{}")
@@ -231,16 +268,21 @@ class CarSync(
         return driver
     }
 
-    private suspend fun uploadMonth(driver: String, report: LongReport, source: String) {
-        val row = uploader.upload(driver, report, Mode.MAEUM, source) ?: return
+    private suspend fun uploadMonth(driver: String, report: LongReport, source: String, allowed: () -> Boolean = { true }): Boolean {
+        if (!allowed()) return false
+        val row = uploader.upload(driver, report, Mode.MAEUM, source, allowed) ?: return true
+        if (!allowed()) return false
         // Do not leave an old month's/old summary's letter visible after a failed new generation.
         state.setLetterDriver(null)
         repo.saveReport("LETTER", "{}")
-        val letter = uploader.letterFor(driver, row, report) ?: return
-        if (state.driverId != driver) return
-        repo.saveReport("LETTER", buildJsonObject {
-            put("month", row.getValue("month")); put("text", letter)
-        }.toString())
-        state.setLetterDriver(driver)
+        val letter = uploader.letterFor(driver, row, report, allowed)
+        if (!allowed() || state.driverId != driver) return false
+        if (letter != null) {
+            repo.saveReport("LETTER", buildJsonObject {
+                put("month", row.getValue("month")); put("text", letter)
+            }.toString())
+            state.setLetterDriver(driver)
+        }
+        return true
     }
 }
