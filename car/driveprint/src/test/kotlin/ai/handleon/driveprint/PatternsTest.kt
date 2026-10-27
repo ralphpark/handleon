@@ -12,9 +12,9 @@ class PatternsTest {
     private val zone = ZoneId.of("Asia/Seoul")
     private val today = LocalDate.parse("2026-10-25")
     private fun trip(date: String = "2026-10-01T12:00", minutes: Double = 20.0, night: Boolean = false,
-                     km: Double = 10.0, cell: Long? = 1, radius: Double? = 8.0): TripFeatures {
+                     km: Double = 10.0, cell: Long? = 1, radius: Double? = 8.0, source: Source = Source.CAR): TripFeatures {
         val start = LocalDateTime.parse(date).atZone(zone).toInstant().toEpochMilli()
-        return TripFeatures(start, start + (minutes * 60_000).toLong(), Source.CAR, km, night, false, false,
+        return TripFeatures(start, start + (minutes * 60_000).toLong(), source, km, night, false, false,
             cell, radius, false, false, 0.0, 0, 0, 0, 0, 0, null, 0, null, null, 0, 0)
     }
     private fun report(baselines: Map<FeatureId, Baseline> = emptyMap(), window: BaselineWindow? = null) =
@@ -74,6 +74,17 @@ class PatternsTest {
         assertEquals(0.667, row.usualNightRatio); assertEquals(0.667, row.usualLongRatio)
         val even = Patterns.monthly(trips, report(window = window.copy(toExclusive = YearMonth.of(2026, 9))), zone, today).first()
         assertEquals(2, even.usualTrips); assertEquals(35, even.usualMinutes)
+    }
+
+    @Test fun timelineImportOfCarDayIsNotCountedTwice() {
+        val trips = listOf(trip("2026-09-10T12:00"), trip("2026-09-10T12:00", source = Source.TIMELINE),
+            trip("2026-09-11T12:00", source = Source.TIMELINE),
+            trip(), trip(source = Source.TIMELINE), trip("2026-10-02T12:00", source = Source.TIMELINE))
+        val window = BaselineWindow(YearMonth.of(2026, 9), YearMonth.of(2026, 10))
+        val row = Patterns.monthly(trips, report(window = window), zone, today).first()
+        // Same rule as Driveprint.longReport: timeline trips count only on days without car trips.
+        assertEquals(2, row.trips); assertEquals(40, row.driveMinutes); assertEquals(2, row.driveDays)
+        assertEquals(2, row.usualTrips); assertEquals(40, row.usualMinutes)
     }
 
     @Test fun serializationHasOnlyAggregatesAndMonthString() {

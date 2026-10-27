@@ -164,6 +164,31 @@ void main() {
       );
     }
   });
+  test('a missing display name falls back to 가족 as in the feed', () {
+    // profiles.display_name may be null; one such row must not fail the whole list.
+    expect(
+      FeedRow.fromJson({...feedJson(), 'driver_name': null}).driverName,
+      '가족',
+    );
+    expect(pattern(changes: {'driver_name': null}).driverName, '가족');
+    expect(
+      FamilyLink.fromJson({...linkJson(), 'driver_name': null}).driverName,
+      '가족',
+    );
+    expect(
+      SentNote.fromJson({...noteJson(), 'driver_name': null}).driverName,
+      '가족',
+    );
+    expect(
+      SharingRecipient.fromJson({
+        'family_name': null,
+        'scope': 'stage',
+        'delay_days': 0,
+        'share_pattern': false,
+      }).familyName,
+      '가족',
+    );
+  });
   test('NoteError maps only PostgrestException.message', () {
     for (final (message, expected) in [
       ('invalid_note', NoteError.invalid),

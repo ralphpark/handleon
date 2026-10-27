@@ -176,7 +176,7 @@ class SharingRecipient {
   final ShareTiming timing;
   final bool sharePattern;
   factory SharingRecipient.fromJson(Map<String, dynamic> j) => SharingRecipient(
-    familyName: _string(j['family_name']),
+    familyName: _string(j['family_name'] ?? '가족'),
     scope: _scope(j['scope']),
     timing: _timing(j['delay_days']),
     sharePattern: _boolean(j['share_pattern']),
@@ -220,7 +220,7 @@ class PatternRow {
   final double? usualNightRatio, usualLongRatio;
   factory PatternRow.fromJson(Map<String, dynamic> j) => PatternRow(
     driverId: _string(j['driver_id']),
-    driverName: _string(j['driver_name']),
+    driverName: _string(j['driver_name'] ?? '가족'),
     month: _month(j['month']),
     partial: _boolean(j['partial']),
     trips: _integer(j['trips']),
@@ -252,7 +252,7 @@ class FamilyLink {
   final bool sharePattern, paused;
   factory FamilyLink.fromJson(Map<String, dynamic> j) => FamilyLink(
     driverId: _string(j['driver_id']),
-    driverName: _string(j['driver_name']),
+    driverName: _string(j['driver_name'] ?? '가족'),
     scope: _scope(j['scope']),
     timing: _timing(j['delay_days']),
     sharePattern: _boolean(j['share_pattern']),
@@ -292,7 +292,7 @@ class SentNote {
   factory SentNote.fromJson(Map<String, dynamic> j) => SentNote(
     id: _integer(j['id']),
     driverId: _string(j['driver_id']),
-    driverName: _string(j['driver_name']),
+    driverName: _string(j['driver_name'] ?? '가족'),
     body: _string(j['body']),
     createdAt: _timestamp(j['created_at']),
     seenAt: j['seen_at'] == null ? null : _timestamp(j['seen_at']),

@@ -127,6 +127,36 @@ test("a car controls only its own driver and revoke-all ends every share", async
   assertEquals(ok(await family.client.rpc("get_family_links")), []);
   assertEquals(ok(await driver.client.rpc("get_my_shares")), []);
 });
+test("revoke-all also ends unused invite codes; a new invite still works", async () => {
+  const { driver, car, family } = await sharedPair("stage", 0, false);
+  const unused = ok(
+    await driver.client.rpc("create_invite", {
+      p_scope: "detail",
+      p_delay_days: 0,
+      p_share_pattern: true,
+    }),
+  );
+  const later = await newUser("family");
+  assertEquals(ok(await car.client.rpc("revoke_all_shares")), 1);
+  assertEquals(
+    (await later.client.rpc("preview_invite", { p_code: unused })).error?.message,
+    "invalid_or_expired_code",
+  );
+  assertEquals(
+    (await later.client.rpc("accept_invite", { p_code: unused })).error?.message,
+    "invalid_or_expired_code",
+  );
+  assertEquals(ok(await later.client.rpc("get_family_links")), []);
+  const fresh = ok(
+    await driver.client.rpc("create_invite", {
+      p_scope: "stage",
+      p_delay_days: 0,
+      p_share_pattern: false,
+    }),
+  );
+  ok(await family.client.rpc("accept_invite", { p_code: fresh }));
+  assertEquals(ok(await driver.client.rpc("get_my_shares")).length, 1);
+});
 test("family notes reach the linked car, are capped while unread, and show as read", async () => {
   const { driver, car, family } = await sharedPair("stage", 0, false);
   const stranger = await newCar();

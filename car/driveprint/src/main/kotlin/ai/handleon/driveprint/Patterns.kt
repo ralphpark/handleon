@@ -26,7 +26,11 @@ object Patterns {
                 months: Int = 6): List<PatternMonth> {
         if (trips.isEmpty() || months <= 0) return emptyList()
         val current = YearMonth.from(today)
-        val grouped = trips.groupBy { YearMonth.from(Instant.ofEpochMilli(it.startMs).atZone(zone)) }
+        fun date(trip: TripFeatures) = Instant.ofEpochMilli(trip.startMs).atZone(zone).toLocalDate()
+        // As in Driveprint.longReport: a timeline import of a day the car recorded holds the same drives.
+        val carDays = trips.filter { it.source == Source.CAR }.map(::date).toSet()
+        val grouped = trips.filterNot { it.source == Source.TIMELINE && date(it) in carDays }
+            .groupBy { YearMonth.from(date(it)) }
         val first = grouped.keys.minOrNull()!!
         fun monthTrips(month: YearMonth) = grouped[month].orEmpty()
         fun minutes(selected: List<TripFeatures>) = (selected.sumOf { it.endMs - it.startMs } / 60_000.0).roundToInt()
