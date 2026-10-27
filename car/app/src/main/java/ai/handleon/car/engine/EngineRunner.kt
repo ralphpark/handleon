@@ -1,6 +1,7 @@
 package ai.handleon.car.engine
 
 import ai.handleon.car.store.TripStore
+import ai.handleon.car.sync.fedEffect
 import ai.handleon.driveprint.ConditionReport
 import ai.handleon.driveprint.Driveprint
 import ai.handleon.driveprint.WeeklyReport
@@ -42,7 +43,11 @@ class EngineRunner(
         val resets = repo.resets().mapNotNull { (day, kind) ->
             ResetKind.entries.firstOrNull { it.name == kind }?.let { Reset(day, it) }
         }.toSet()
-        val report = withContext(Dispatchers.Default) { engine.weeklyReport(trips, labels, resets, today) }
+        val effect = fedEffect(repo.report("FED_MODEL"))
+        val report = withContext(Dispatchers.Default) {
+            if (effect == null) engine.weeklyReport(trips, labels, resets, today)
+            else engine.weeklyReport(trips, labels, resets, today, effect = effect)
+        }
         repo.saveReport("WEEKLY", Json.encodeToString(report))
         report
     }
@@ -55,10 +60,12 @@ class EngineRunner(
         val resets = repo.resets().mapNotNull { (day, kind) ->
             ResetKind.entries.firstOrNull { it.name == kind }?.let { Reset(day, it) }
         }.toSet()
+        val effect = fedEffect(repo.report("FED_MODEL"))
         val next = withContext(Dispatchers.Default) {
             when (mode) {
                 Mode.MAEUM -> {
-                    val weekly = engine.weeklyReport(trips, labeledDays, resets, now.toLocalDate())
+                    val weekly = if (effect == null) engine.weeklyReport(trips, labeledDays, resets, now.toLocalDate())
+                        else engine.weeklyReport(trips, labeledDays, resets, now.toLocalDate(), effect = effect)
                     EngineState(engine.longReport(trips, labeledDays, resets, now.toLocalDate()), null,
                         now.toInstant().toEpochMilli(), weekly,
                         engine.readiness(trips, weekly, now.toLocalDate(), labeledDays, resets))

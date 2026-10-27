@@ -19,8 +19,15 @@ class DailyWorker(context: Context, parameters: WorkerParameters) : CoroutineWor
         val modeName = inputData.getString(KEY_MODE)
         val mode = Mode.entries.firstOrNull { it.name == modeName } ?: return Result.failure()
         return try {
-            (applicationContext as HandleOnApp).graph.engineRunner.run(mode)
-            Result.success()
+            val graph = (applicationContext as HandleOnApp).graph
+            if (graph.erasingData || !graph.firstRunComplete()) return Result.success()
+            var fedFailed = false
+            try { graph.fedClient.daily(System.currentTimeMillis()) }
+            catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) { fedFailed = true }
+            // Local reports still run with the default engine when the shared model cannot be fetched.
+            if (!graph.erasingData && graph.firstRunComplete()) graph.engineRunner.run(mode)
+            if (fedFailed) Result.retry() else Result.success()
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (_: Exception) {

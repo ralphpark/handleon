@@ -26,6 +26,37 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 
 class EngineRunnerTest {
+    @Test fun `learned global model affects weekly reports refresh and Gleo consistently`() = runTest {
+        val first = LocalDate.of(2026, 4, 6)
+        val now = first.plusWeeks(4).atTime(9, 0).atZone(KST)
+        val template = load("father").first()
+        val trips = (0L..3L).flatMap { week -> (0L..2L).map { day ->
+            val start = first.plusWeeks(week).plusDays(day).atTime(9, 0).atZone(KST).toInstant().toEpochMilli()
+            template.copy(source = ai.handleon.driveprint.Source.CAR, startMs = start, endMs = start + 60000)
+        } }
+        val store = MemoryStore(trips)
+        val runner = runner(store, now.toString())
+        val plain = runner.run(Mode.MAEUM)
+        val model = """{"round":1,"weights":[-0.3,0,0,0,0,0,0,0,0,0,0,0,0,0,0]}"""
+        store.saveReport("FED_MODEL", model)
+        val learned = runner.run(Mode.MAEUM)
+        kotlin.test.assertTrue(learned.weekly!!.weeks.all { it.excluded })
+        kotlin.test.assertNotEquals(plain.weekly, learned.weekly)
+        assertEquals(plain.long, learned.long)
+        assertEquals(learned.weekly, runner.refreshWeekly(now.toLocalDate()))
+        val gleo = ai.handleon.car.gleo.buildGleoContext(trips, emptySet(), emptySet(), emptySet(), now, false, model)
+        assertEquals(learned.weekly.status, gleo.weekly)
+    }
+
+    @Test fun `missing invalid and round zero models preserve the current engine result`() = runTest {
+        val store = MemoryStore(load("father"))
+        val runner = runner(store)
+        val original = runner.run(Mode.MAEUM)
+        for (model in listOf("null", "{}", """{"round":0,"weights":[-0.3,0,0,0,0,0,0,0,0,0,0,0,0,0,0]}""")) {
+            store.saveReport("FED_MODEL", model)
+            assertEquals(original, runner.run(Mode.MAEUM))
+        }
+    }
     @Test fun fatherDataGivesTalkInMaeumMode() = runTest {
         val store = MemoryStore(load("father"))
         val runner = runner(store)

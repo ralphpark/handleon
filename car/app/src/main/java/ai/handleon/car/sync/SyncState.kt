@@ -8,6 +8,8 @@ data class SyncSnapshot(val driverId: String? = null, val lastSyncMs: Long? = nu
 
 /** The same private handleon_sync preferences as the session store. */
 class SyncState(private val prefs: SharedPreferences) {
+    private val connectionCounter = java.util.concurrent.atomic.AtomicLong()
+    val connectionGeneration: Long get() = connectionCounter.get()
     private val mutable = MutableStateFlow(SyncSnapshot(prefs.getString("driver_id", null),
         if (prefs.contains("last_sync_ms")) prefs.getLong("last_sync_ms", 0) else null,
         prefs.getString("letter_driver_id", null)))
@@ -17,6 +19,7 @@ class SyncState(private val prefs: SharedPreferences) {
 
     @Synchronized fun setDriver(driverId: String?) {
         if (driverId == this.driverId) return
+        connectionCounter.incrementAndGet()
         prefs.edit().putString("driver_id", driverId).remove("last_sync_ms").remove("letter_driver_id").apply()
         mutable.value = SyncSnapshot(driverId)
     }

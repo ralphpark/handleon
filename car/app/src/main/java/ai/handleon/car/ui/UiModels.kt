@@ -128,4 +128,5 @@ data class SettingsUi(val mode: Mode, val presentation: Boolean, val homeRegiste
                       val deletionAvailable: Boolean = COLLECTOR_ERASURE_AVAILABLE, val pairing: PairingUi = PairingUi(),
                       val alwaysLocation: Boolean = false,
                       val sharing: SharingUi? = null, val sharingBusy: Boolean = false,
-                      val sharingError: String? = null, val confirmRevoke: Boolean = false)
+                      val sharingError: String? = null, val confirmRevoke: Boolean = false,
+                      val fed: ai.handleon.car.sync.FedUi = ai.handleon.car.sync.FedUi())

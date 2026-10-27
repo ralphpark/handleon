@@ -10,13 +10,15 @@ import java.time.YearMonth
 import java.time.ZonedDateTime
 
 fun buildGleoContext(ownerTrips: List<TripFeatures>, promises: Set<Promise>, labels: Set<LocalDate>, resets: Set<Reset>,
-                     now: ZonedDateTime, driving: Boolean): GleoContext {
+                     now: ZonedDateTime, driving: Boolean, fedModel: String? = null): GleoContext {
     val day = now.withZoneSameInstant(KST).toLocalDate()
     val history = ownerTrips.filter { it.source != Source.SIM && it.startMs <= now.toInstant().toEpochMilli() && it.endMs <= now.toInstant().toEpochMilli() }
     val car = carTripsThrough(history, now.toInstant().toEpochMilli())
     val resume = buildResume(car, promises, now)
     val engine = Driveprint()
-    val weekly = engine.weeklyReport(history, labels, resets, day)
+    val effect = ai.handleon.car.sync.fedEffect(fedModel)
+    val weekly = if (effect == null) engine.weeklyReport(history, labels, resets, day)
+        else engine.weeklyReport(history, labels, resets, day, effect = effect)
     return GleoContext(driving, car.filter { Instant.ofEpochMilli(it.startMs).atZone(KST).toLocalDate() == day }.map(Habits::of),
         resume.week, resume.promises, engine.readiness(history, weekly, day, labels, resets), weekly.status, YearMonth.from(day))
 }

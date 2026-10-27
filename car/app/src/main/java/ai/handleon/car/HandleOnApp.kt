@@ -37,6 +37,12 @@ class AppGraph(val context: Context) {
     }
     val pairing by lazy { Pairing(supabase) }
     val carSync by lazy { CarSync(supabase, syncState, tripRepository, engineRunner, ::mode, ::presentation, selectedPromises = ::promises) }
+    val fedClient by lazy { FedClient(supabase, tripRepository, ::presentation,
+        FedConsentStore(context.getSharedPreferences("handleon_fed_consent", Context.MODE_PRIVATE)), { syncState.driverId }, {
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            context.assets.open("fed_virtual_weeks.json").bufferedReader().use { parseFedVirtuals(it.readText()) }
+        }
+    }, { firstRunComplete() && !erasingData }, { syncState.connectionGeneration }) }
     private val prefs by lazy { context.getSharedPreferences("handleon", Context.MODE_PRIVATE) }
     private val otherDriverFlag by lazy { ai.handleon.car.collect.OtherDriverFlag(prefs) }
     private val setupState = MutableStateFlow(firstRunComplete())

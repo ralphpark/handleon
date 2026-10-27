@@ -89,6 +89,8 @@ fun Nav(graph: AppGraph, engine: EngineState, replay: ReplayViewModel, driving: 
     var centerUi by remember { mutableStateOf(CenterUi()) }
     var letter by remember { mutableStateOf<LetterUi?>(null) }
     val sync by graph.syncState.state.collectAsStateWithLifecycle()
+    val fed by graph.fedClient.state.collectAsStateWithLifecycle()
+    var fedJob by remember { mutableStateOf<Job?>(null) }
     var sharing by remember(sync.driverId) { mutableStateOf<SharingUi?>(null) }
     var notes by remember(sync.driverId) { mutableStateOf<List<CarNote>>(emptyList()) }
     var familyError by remember(sync.driverId) { mutableStateOf<String?>(null) }
@@ -198,6 +200,18 @@ fun Nav(graph: AppGraph, engine: EngineState, replay: ReplayViewModel, driving: 
     fun openCenter() { centerReturn = screen.key; route = Screen.Center.key }
 
     fun parkedAndResumed() = !drivingNow() && lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
+    fun fedAction(block: suspend () -> Unit) {
+        if (!parkedAndResumed() || Screen.from(route) != Screen.Settings || busy) return
+        fedJob?.cancel()
+        fedJob = scope.launch(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) {
+            try { block() }
+            catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) { /* FedClient exposes only a fixed message. */ }
+            try { if (!graph.erasingData && graph.firstRunComplete()) graph.engineRunner.run(mode) }
+            catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) { error = "저장된 기록을 열지 못했어요." }
+        }
+    }
     fun familyAvailable() = parkedAndResumed() && graph.syncState.driverId != null &&
         Screen.from(route) in listOf(Screen.Home, Screen.Settings)
 
@@ -233,6 +247,14 @@ fun Nav(graph: AppGraph, engine: EngineState, replay: ReplayViewModel, driving: 
         }
     }
     LaunchedEffect(sync.driverId) { familyJob?.cancel(); revokeDialog = false }
+    LaunchedEffect(screen, resumed, driving, sync.driverId) {
+        fedJob?.cancel() // A changed linked driver also invalidates work queued from this screen.
+        if (screen == Screen.Settings && resumed && !driving) {
+            try { graph.fedClient.load() }
+            catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) { /* Fixed FedClient state remains visible. */ }
+        }
+    }
     LaunchedEffect(resumed, driving) {
         if (resumed && !driving) while (isActive) { nowMs = System.currentTimeMillis(); delay(1000) }
     }
@@ -411,7 +433,7 @@ fun Nav(graph: AppGraph, engine: EngineState, replay: ReplayViewModel, driving: 
                 Screen.Settings -> SettingsScreen(SettingsUi(mode, presentation, home != null, deleteDialog, busy,
                     pairing = pairing.copy(driverId = sync.driverId, lastSyncMs = sync.lastSyncMs, presentation = presentation),
                     alwaysLocation = alwaysLocation, sharing = sharing, sharingBusy = familyBusy,
-                    sharingError = familyError, confirmRevoke = revokeDialog),
+                    sharingError = familyError, confirmRevoke = revokeDialog, fed = fed),
                     onMode = { selected -> action {
                         graph.setMode(selected); modeName = selected.name
                         DailyWorker.schedule(graph.context, selected)
@@ -429,13 +451,13 @@ fun Nav(graph: AppGraph, engine: EngineState, replay: ReplayViewModel, driving: 
                         replay.end()
                         graph.erasingData = true
                         try {
-                            eraseCollectedData(
+                            graph.fedClient.withErasure { eraseCollectedData(
                                 stopAndAwait = { stopCollectionBeforeErase(graph.context) },
                                 clearCheckpoint = { withContext(Dispatchers.IO) {
                                     clearCollectorCheckpoints(graph.context.filesDir)
                                 } },
                                 clearTables = { withContext(Dispatchers.IO) { graph.db.clearAllTables() } },
-                                finish = { graph.clearUiPreferences() })
+                                finish = { graph.clearUiPreferences() }) }
                         } finally { graph.erasingData = false }
                         birth = ""; firstMode = Mode.CONDITION.name; consent0 = false; consent1 = false; consent2 = false
                         home = null; progress = null; labels = emptyMap(); resets = emptyList(); past = false
@@ -450,7 +472,10 @@ fun Nav(graph: AppGraph, engine: EngineState, replay: ReplayViewModel, driving: 
                     onSync = { SyncWorker.enqueue(graph.context) },
                     onDevEngine = { if (presentation) route = Screen.DevEngine.key },
                     onResume = { if (parkedAndResumed()) route = Screen.Resume.key },
-                    onPromises = { if (parkedAndResumed()) route = Screen.Promises.key })
+                    onPromises = { if (parkedAndResumed()) route = Screen.Promises.key },
+                    onFedToggle = { value -> fedAction { graph.fedClient.setOptIn(value) } },
+                    onFedRound = { if (presentation) fedAction { graph.fedClient.round(System.currentTimeMillis()) } },
+                    onFedRefresh = { if (presentation) fedAction { graph.fedClient.refreshModel() } })
                 Screen.Resume -> ResumeScreen(resumeUi, ::back, { if (parkedAndResumed()) route = Screen.Promises.key })
                 Screen.Promises -> PromiseSettings(selectedPromises, { values ->
                     if (parkedAndResumed()) {

@@ -145,9 +145,11 @@ class SupabaseClient(
     private fun failure(reply: Reply, session: Session?): SupabaseException {
         val secrets = listOfNotNull(anonKey, session?.accessToken, session?.refreshToken).filter(String::isNotBlank)
         val obj = try { Json.parseToJsonElement(reply.body) as? JsonObject } catch (_: Exception) { null }
-        val code = listOf("code", "error", "message").asSequence()
+        val candidates = listOf("code", "error", "message").asSequence()
             .mapNotNull { (obj?.get(it) as? JsonPrimitive)?.contentOrNull }
-            .firstOrNull { it.matches(Regex("[A-Za-z][A-Za-z0-9_]{0,63}")) && secrets.none { secret -> secret in it } }
+            .filter { it.matches(Regex("[A-Za-z][A-Za-z0-9_]{0,63}")) && secrets.none { secret -> secret in it } }.toList()
+        // These exact public RPC codes are in message when PostgREST also supplies SQLSTATE P0001.
+        val code = candidates.firstOrNull { it in setOf("round_changed", "fed_opt_in_required") } ?: candidates.firstOrNull()
         return SupabaseException(reply.status, code)
     }
 }

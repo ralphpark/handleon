@@ -1,0 +1,31 @@
+// Reproduce C7's mock weekly counts from the existing simulator without editing or depending on it in the app.
+gradle.projectsEvaluated {
+    def sim = gradle.rootProject.project(':sim')
+    sim.tasks.register('exportFedVirtualWeeks') {
+        dependsOn sim.tasks.named('classes')
+        doLast {
+            def urls = sim.sourceSets.main.runtimeClasspath.files.collect { it.toURI().toURL() } as URL[]
+            def loader = new URLClassLoader(urls, ClassLoader.getPlatformClassLoader())
+            try {
+                def type = loader.loadClass('ai.handleon.sim.Personas')
+                def instance = type.getField('INSTANCE').get(null)
+                def zone = java.time.ZoneId.of('Asia/Seoul')
+                def specs = [['virtual-1', 'father', 17L], ['virtual-2', 'sudden', 5L]]
+                def clients = specs.collect { tag, persona, seed ->
+                    def trips = type.getMethod(persona, Long.TYPE).invoke(instance, seed)
+                    def counts = new TreeMap<String, Integer>()
+                    trips.each { trip ->
+                        def day = java.time.Instant.ofEpochMilli(trip.startMs).atZone(zone).toLocalDate()
+                        def week = day.minusDays(day.dayOfWeek.value - 1L).toString()
+                        counts[week] = (counts[week] ?: 0) + 1
+                    }
+                    [tag: tag, persona: persona, seed: seed,
+                     weeks: counts.collect { week, count -> [week_start: week, trips: count] }]
+                }
+                def output = new File(gradle.rootProject.projectDir, 'app/src/main/assets/fed_virtual_weeks.json')
+                output.text = groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson([version: 1, clients: clients])) + '\n'
+                println('Exported mock weekly counts: ' + clients.collect { it.tag + '=' + it.weeks.size }.join(', '))
+            } finally { loader.close() }
+        }
+    }
+}

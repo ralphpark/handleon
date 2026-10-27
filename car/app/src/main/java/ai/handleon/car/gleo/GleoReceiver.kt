@@ -77,7 +77,7 @@ class GleoReceiver : BroadcastReceiver() {
                             val resets = repo.resets().mapNotNull { (day, kind) ->
                                 ResetKind.entries.firstOrNull { it.name == kind }?.let { Reset(day, it) }
                             }.toSet()
-                            buildGleoContext(repo.trips(), graph.promises(), repo.labels().keys, resets, ZonedDateTime.now(KST), graph.driving)
+                            buildGleoContext(repo.trips(), graph.promises(), repo.labels().keys, resets, ZonedDateTime.now(KST), graph.driving, repo.report("FED_MODEL"))
                         }, { action -> enqueueGleoConfirmation(action, graph.pendingConfirm,
                             graph.tripRepository::latestCarForCorrection, System::currentTimeMillis, ::ready) })
                     }

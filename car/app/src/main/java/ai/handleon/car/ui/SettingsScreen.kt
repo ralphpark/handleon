@@ -19,18 +19,19 @@ fun SettingsScreen(ui: SettingsUi, onMode: (Mode) -> Unit, onReplay: () -> Unit,
                    onDeleteDialog: (Boolean) -> Unit, onDelete: () -> Unit, onBack: () -> Unit,
                    onNewCode: () -> Unit = {}, onSync: () -> Unit = {}, onDevEngine: () -> Unit = {},
                    onAlwaysLocation: () -> Unit = {}, onSharingToggle: () -> Unit = {},
-                   onRevokeDialog: (Boolean) -> Unit = {}, onRevoke: () -> Unit = {}, onResume: () -> Unit = {}, onPromises: () -> Unit = {}) {
+                   onRevokeDialog: (Boolean) -> Unit = {}, onRevoke: () -> Unit = {}, onResume: () -> Unit = {}, onPromises: () -> Unit = {},
+                   onFedToggle: (Boolean) -> Unit = {}, onFedRound: () -> Unit = {}, onFedRefresh: () -> Unit = {}) {
     ScreenFrame { wide ->
         PageHeader("설정", onBack)
         if (wide) Row(horizontalArrangement = Arrangement.spacedBy(28.dp)) {
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(16.dp)) { SettingsRows(ui, onMode, onReplay, onPresentation, onDeleteDialog, onDevEngine, onAlwaysLocation, onResume, onPromises) }
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(16.dp)) { SettingsRows(ui, onMode, onReplay, onPresentation, onDeleteDialog, onDevEngine, onAlwaysLocation, onResume, onPromises, onFedToggle, onFedRound, onFedRefresh) }
             Column(Modifier.weight(1.1f), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 if (ui.pairing.driverId != null) SharingPanel(ui.sharing, ui.sharingBusy, ui.sharingError, ui.confirmRevoke,
                     onSharingToggle, onRevokeDialog, onRevoke)
                 GlassPanel(Modifier.fillMaxWidth(), padding = 44.dp) { PairingScreen(ui.pairing, onNewCode, onSync) }
             }
         } else {
-            SettingsRows(ui, onMode, onReplay, onPresentation, onDeleteDialog, onDevEngine, onAlwaysLocation, onResume, onPromises)
+            SettingsRows(ui, onMode, onReplay, onPresentation, onDeleteDialog, onDevEngine, onAlwaysLocation, onResume, onPromises, onFedToggle, onFedRound, onFedRefresh)
             if (ui.pairing.driverId != null) SharingPanel(ui.sharing, ui.sharingBusy, ui.sharingError, ui.confirmRevoke,
                 onSharingToggle, onRevokeDialog, onRevoke)
             GlassPanel(Modifier.fillMaxWidth()) { PairingScreen(ui.pairing, onNewCode, onSync) }
@@ -45,7 +46,8 @@ fun SettingsScreen(ui: SettingsUi, onMode: (Mode) -> Unit, onReplay: () -> Unit,
 @Composable
 private fun SettingsRows(ui: SettingsUi, onMode: (Mode) -> Unit, onReplay: () -> Unit,
                          onPresentation: (Boolean) -> Unit, onDeleteDialog: (Boolean) -> Unit, onDevEngine: () -> Unit,
-                         onAlwaysLocation: () -> Unit, onResume: () -> Unit, onPromises: () -> Unit) {
+                         onAlwaysLocation: () -> Unit, onResume: () -> Unit, onPromises: () -> Unit,
+                         onFedToggle: (Boolean) -> Unit, onFedRound: () -> Unit, onFedRefresh: () -> Unit) {
     GlassPanel(Modifier.fillMaxWidth()) {
         Text("모드", style = MaterialTheme.typography.titleMedium, color = DarkTokens.ink)
         Spacer(Modifier.height(16.dp))
@@ -53,6 +55,7 @@ private fun SettingsRows(ui: SettingsUi, onMode: (Mode) -> Unit, onReplay: () ->
     }
     SettingRow("내 운전 이력서", "이번 주와 이번 달의 운전 기록을 돌아봐요") { PillButton("보기", onResume, kind = PillKind.SECONDARY) }
     SettingRow("운전 약속", "내가 지키고 싶은 약속을 골라요") { PillButton("고르기", onPromises, kind = PillKind.SECONDARY) }
+    FedSettingsPanel(ui.fed, ui.presentation, ui.pairing.driverId != null, ui.busy, onFedToggle, onFedRound, onFedRefresh)
     SettingRow("휴대폰 연결", if (ui.pairing.driverId == null) "연결된 휴대폰 없음" else "휴대폰과 연결됐어요") {}
     // 위치가 '항상 허용'이어야 앱을 열지 않아도 시동 직후부터 모을 수 있다(안드로이드 14 백그라운드 제한).
     SettingRow("시동 직후부터 모으기", if (ui.alwaysLocation) "앱을 열지 않아도 시동을 걸면 바로 모아요"
