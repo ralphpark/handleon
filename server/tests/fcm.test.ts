@@ -10,6 +10,19 @@ import {
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { pendingNotifications } from "../supabase/functions/_shared/dispatch-store.ts";
 
+Deno.test("message uses the note text and kind", () => {
+  assertEquals(
+    message("device", { title: "핸들온", body: "가족님이 운전을 마치셨어요", kind: "drive_done" }),
+    {
+      message: {
+        token: "device",
+        notification: { title: "핸들온", body: "가족님이 운전을 마치셨어요" },
+        data: { kind: "drive_done" },
+      },
+    },
+  );
+});
+
 const now = new Date("2026-10-22T12:00:00Z");
 const queue: QueueItem = {
   id: 1,
@@ -248,4 +261,50 @@ Deno.test("pending query excludes deferred attempts and prioritizes untried rows
   });
   assertEquals(await pendingNotifications(db, now), [queue]);
   assert(called);
+});
+
+Deno.test("dispatch sends kind-specific safe copy using the latest driver name", async () => {
+  for (const kind of ["stage", "drive_done", "drive_evening", "weekly_change"] as const) {
+    for (
+      const name of [
+        "시험 운전자",
+        null,
+        "치\u200b매",
+        "등 급",
+        "면 허 반 납",
+        "알츠하이머",
+        "고령 운전자",
+      ]
+    ) {
+      const s: DeliveryState = {
+        ...state(),
+        queue: { ...queue, kind },
+        profile: { display_name: name, sharing_paused_at: null },
+        options: { drive_done: kind === "drive_evening" ? "evening" : "each", weekly_change: true },
+        drive: { ended_at: "2026-10-22T11:00:00Z", retracted_at: null },
+        evening_count: 1,
+        weekly: { created_at: "2026-10-19T12:00:00Z", flagged: true },
+      };
+      const f = fakeStore(s);
+      let sends = 0;
+      f.store.send = async (device, note) => {
+        assertEquals(note.kind, kind);
+        assertFalse(
+          /치매|등급|위험|점수|진단|반납|알츠하이머|고령운전자/.test(
+            note.body.replace(/[\s\p{Cf}]/gu, ""),
+          ),
+        );
+        if (kind !== "stage") assert(note.body.startsWith(name === "시험 운전자" ? name : "가족"));
+        await sendMessage("test-project", "test-access", device, async (_input, init) => {
+          const payload = await new Request(_input, init).json();
+          assertEquals(payload.message.data.kind, kind);
+          assertEquals(payload.message.notification.body, note.body);
+          sends++;
+          return Response.json({ name: "projects/test/messages/1" });
+        }, note);
+      };
+      assert(await dispatchOne(s.queue!, f.store, () => now));
+      assertEquals(sends, 2);
+    }
+  }
 });

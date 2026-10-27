@@ -24,7 +24,7 @@ export async function handler(request: Request): Promise<Response> {
     const token = await accessToken(json, new Date());
     const store = createDispatchStore(
       db,
-      (device) => sendMessage(account.project_id, token, device),
+      (device, note) => sendMessage(account.project_id, token, device, fetch, note),
     );
     let sent = 0, skipped = 0, failed = 0;
     for (const q of queue) {

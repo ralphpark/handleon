@@ -31,6 +31,85 @@ const queue: QueueItem = {
   sent_at: null,
   cancelled_at: null,
 };
+
+function driveState(): DeliveryState {
+  return {
+    queue: { ...queue, kind: "drive_done", ref: "1792670000000" },
+    link: { revoked_at: null, delay_days: 14 },
+    summary: null,
+    profile: { display_name: "가족", sharing_paused_at: null },
+    options: { drive_done: "each", weekly_change: false },
+    drive: { ended_at: iso(now.getTime() - 30 * 60_000), retracted_at: null },
+  };
+}
+
+Deno.test("drive_done ignores delay days", () => {
+  assert(canSend(driveState(), now));
+  assertFalse(canSend(driveState(), at(now.getTime() - 1)));
+});
+Deno.test("stale drive end is never sent", () => {
+  const s = driveState();
+  s.drive!.ended_at = iso(now.getTime() - 6 * 3_600_000);
+  assert(canSend(s, now));
+  s.drive!.ended_at = iso(now.getTime() - (6 * 60 + 1) * 60_000);
+  assertFalse(canSend(s, now));
+});
+Deno.test("retracted drive is not sent", () => {
+  const s = driveState();
+  s.drive!.retracted_at = now.toISOString();
+  assertFalse(canSend(s, now));
+});
+Deno.test("drive_evening needs at least one drive", () => {
+  const s = driveState();
+  s.queue = { ...queue, kind: "drive_evening", ref: "2026-10-22" };
+  s.options!.drive_done = "evening";
+  s.evening_count = 0;
+  assertFalse(canSend(s, now));
+  s.evening_count = 1;
+  assert(canSend(s, now));
+});
+Deno.test("stage rules are unchanged", () => {
+  const s = state();
+  s.queue!.kind = "stage";
+  assert(canSend(s, now));
+  assertFalse(canSend(s, at(now.getTime() - 1)));
+  s.summary!.stage = "stable";
+  assertFalse(canSend(s, now));
+});
+Deno.test("all new kinds recheck pause, revocation and options between devices", async () => {
+  for (const kind of ["drive_done", "drive_evening", "weekly_change"] as const) {
+    const s = driveState();
+    s.queue!.kind = kind;
+    s.options!.drive_done = kind === "drive_evening" ? "evening" : "each";
+    s.options!.weekly_change = true;
+    s.evening_count = 1;
+    s.weekly = { created_at: iso(now.getTime() - 14 * DAY), flagged: true };
+    for (const change of ["pause", "revoke", "option"]) {
+      const f = recordingStore(s);
+      f.onSend = () => {
+        const changed = structuredClone(s);
+        if (change === "pause") changed.profile!.sharing_paused_at = now.toISOString();
+        if (change === "revoke") changed.link!.revoked_at = now.toISOString();
+        if (change === "option") changed.options = { drive_done: null, weekly_change: false };
+        f.set(changed);
+      };
+      assertFalse(await dispatchOne(s.queue!, f.store, () => now));
+      assertEquals(f.sends(), ["token-a"], `${kind} ${change}`);
+    }
+  }
+});
+Deno.test("weekly_change rechecks the current upload, flag and delay", () => {
+  const s = driveState();
+  s.queue!.kind = "weekly_change";
+  s.options!.weekly_change = true;
+  s.weekly = { created_at: iso(now.getTime() - 14 * DAY), flagged: true };
+  assertFalse(canSend(s, at(now.getTime() - 1)));
+  assert(canSend(s, now));
+  s.weekly.flagged = false;
+  assertFalse(canSend(s, now));
+  s.weekly = { created_at: iso(now.getTime() - DAY), flagged: true };
+  assertFalse(canSend(s, now));
+});
 function state(delay_days = 3, stage = "talk"): DeliveryState {
   return {
     queue: { ...queue },
@@ -409,4 +488,61 @@ Deno.test("store state, completion and release are scoped to this dispatcher's c
   assertEquals([released.claim_token, released.claimed_at], [null, null]);
   const next = Date.parse(released.next_attempt_at!);
   assert(next >= before + 10 * 60_000 && next <= after + 10 * 60_000);
+});
+
+Deno.test("store reads the current kind and the KST evening bucket without a monthly summary", async () => {
+  for (const kind of ["drive_done", "drive_evening", "weekly_change"] as const) {
+    const current = { ...queue, kind, ref: kind === "drive_done" ? "1792670000000" : "2026-10-22" };
+    const reads: string[] = [];
+    const db = fakeDb((r) => {
+      const url = new URL(r.url);
+      const table = url.pathname.split("/").at(-1)!;
+      reads.push(table);
+      switch (table) {
+        case "notification_queue":
+          return Response.json(current);
+        case "family_links":
+          return Response.json({ revoked_at: null, delay_days: 14 });
+        case "profiles":
+          return Response.json({ display_name: "가족", sharing_paused_at: null });
+        case "share_options":
+          return Response.json({
+            drive_done: kind === "drive_evening" ? "evening" : "each",
+            weekly_change: true,
+          });
+        case "drive_events":
+          assertEquals(url.searchParams.get("driver_id"), "eq.driver");
+          if (kind === "drive_done") {
+            assertEquals(url.searchParams.get("outing_key"), "eq.1792670000000");
+            return Response.json({ ended_at: "2026-10-22T11:30:00Z", retracted_at: null });
+          }
+          assertEquals(r.method, "HEAD");
+          assertEquals(url.searchParams.get("retracted_at"), "is.null");
+          assertEquals(url.searchParams.getAll("ended_at"), [
+            "gte.2026-10-21T11:00:00.000Z",
+            "lt.2026-10-22T11:00:00.000Z",
+          ]);
+          return new Response(null, { headers: { "content-range": "0-0/1" } });
+        case "weekly_changes":
+          assertEquals(url.searchParams.get("week_start"), "eq.2026-10-22");
+          return Response.json({ created_at: "2026-10-08T12:00:00Z", flagged: true });
+        default:
+          throw new Error(`unexpected table: ${table}`);
+      }
+    });
+    const state = await createDispatchStore(db, () => Promise.resolve()).state(queue);
+    assertEquals(state.queue!.kind, kind); // use current DB row, not stale caller's stage kind
+    assert(canSend(state, now), kind);
+    assertFalse(reads.includes("monthly_summaries"));
+  }
+});
+
+Deno.test("an evening digest expires before a newer evening can overtake it", () => {
+  const s = driveState();
+  s.queue = { ...queue, kind: "drive_evening", ref: "2026-10-22", due_at: "2026-10-22T11:00:00Z" };
+  s.options!.drive_done = "evening";
+  s.evening_count = 1;
+  assert(canSend(s, new Date("2026-10-22T17:00:00Z"))); // exactly six hours after scheduled 20h KST
+  assertFalse(canSend(s, new Date("2026-10-22T17:00:00.001Z")));
+  assertFalse(canSend(s, new Date("2026-10-23T11:00:00Z")));
 });

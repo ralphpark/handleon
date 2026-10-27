@@ -1,19 +1,18 @@
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
 
-// No dotenv/file reads. Missing environment configuration fails before client creation/network.
+// No dotenv/file reads. Missing configuration skips integration tests before client creation/network.
 // Deno CLI loads the three values only when Claude explicitly supplies --env-file=.env.test.
 const url = Deno.env.get("SUPABASE_URL");
 const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
 const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-if (!url || !anonKey || !serviceKey) {
-  throw new Error(
-    "Integration tests require --env-file=.env.test with all three SUPABASE_* values. Never run against production.",
-  );
-}
+const configured = Boolean(url && anonKey && serviceKey);
 const options = {
   auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
 };
-export const admin: SupabaseClient = createClient(url, serviceKey, options);
+// No client is constructed without keys. integrationTest ignores its callback in that case.
+export const admin: SupabaseClient = configured
+  ? createClient(url!, serviceKey!, options)
+  : undefined as unknown as SupabaseClient;
 export type Actor = { client: SupabaseClient; id: string };
 export type Scope = "stage" | "trend" | "detail";
 const users: string[] = [];
@@ -54,7 +53,11 @@ export async function sharedPair(scope: Scope, delay: 0 | 3 | 7 | 14, pattern = 
   const pair = await linkedPair();
   const family = await newUser("family");
   const code = ok(
-    await pair.driver.client.rpc("create_invite", { p_scope: scope, p_delay_days: delay, p_share_pattern: pattern }),
+    await pair.driver.client.rpc("create_invite", {
+      p_scope: scope,
+      p_delay_days: delay,
+      p_share_pattern: pattern,
+    }),
   );
   ok(await family.client.rpc("accept_invite", { p_code: code }));
   return { ...pair, family };
@@ -87,16 +90,20 @@ export async function seedMonth(
 export const hoursAgo = (hours: number) => new Date(Date.now() - hours * 3_600_000).toISOString();
 // Per-test cleanup even when an assertion fails; storage tests remove their objects first.
 export function integrationTest(name: string, fn: () => Promise<void>) {
-  Deno.test(name, async () => {
-    try {
-      await fn();
-    } finally {
-      const errors: string[] = [];
-      for (const id of users.splice(0).reverse()) {
-        const { error } = await admin.auth.admin.deleteUser(id);
-        if (error) errors.push(error.message);
+  Deno.test({
+    name,
+    ignore: !configured,
+    fn: async () => {
+      try {
+        await fn();
+      } finally {
+        const errors: string[] = [];
+        for (const id of users.splice(0).reverse()) {
+          const { error } = await admin.auth.admin.deleteUser(id);
+          if (error) errors.push(error.message);
+        }
+        if (errors.length) throw new Error(`test_cleanup_failed: ${errors.join(", ")}`);
       }
-      if (errors.length) throw new Error(`test_cleanup_failed: ${errors.join(", ")}`);
-    }
+    },
   });
 }

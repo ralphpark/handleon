@@ -34,6 +34,10 @@
 - `0009_revoke_all_ends_invites.sql`: 모두 끊기(`revoke_all_shares`)가 아직 쓰지 않은 초대 코드도 끝냅니다(다시
   나누려면 새로 초대).
 - `0010_expire_stale_notifications.sql`: 7일이 지나도 못 보낸 알림을 매일 취소하는 cron.
+- `0011_share_options_drive_events.sql`: 받는 사람별 새 공유 선택(기본 꺼짐), 위치 없는 나들이 종료 집계,
+  종류별 알림 큐. `drive_done`은 마지막 종료 30분 뒤, `drive_evening`은 KST 20시에 보냅니다.
+- `0012_weekly_changes_habits.sql`: 주간 변화·습관 집계, 가족용 최근 12주 조회와 `weekly_change` 알림.
+  두 마이그레이션은 파일만 작성했으며 원격 적용·통합 검증은 아직 하지 않았습니다.
 - `supabase/functions/monthly-letter/index.ts`: 차량 인증 → 편지 생성 → 해당 운전자의 월 요약 저장.
 - `supabase/functions/dispatch-notifications/index.ts`: 서비스 롤 인증 → 큐 조회 → 현재 동의 재확인
   → FCM.
@@ -56,19 +60,70 @@ deno check --frozen supabase/functions/_shared/*.ts supabase/functions/monthly-l
 ```
 
 순수 시험은 실제 키나 네트워크 서비스가 필요하지 않습니다. RSA 키는 메모리에서 생성하고 외부 요청은 가짜
-fetch로 대체합니다. 편지 제한 시간 시험은 실제로 약 20초 걸립니다. 통합 시험 모듈은 필수 환경변수가
-없으면 클라이언트 생성 전에 중단합니다. 타입 검사는 모듈을 실행하지 않으므로 비밀값 없이 가능합니다.
+fetch로 대체합니다. 편지 제한 시간 시험은 실제로 약 20초 걸립니다. 통합 시험은 필수 환경변수 세 개 중 하나라도
+없으면 클라이언트를 생성하지 않고 `ignored`로 건너뜁니다. 타입 검사는 모듈을 실행하지 않으므로 비밀값 없이 가능합니다.
 
 Deno 2.7.12 의 `check` 에는 `--cached-only` 옵션이 없습니다. 캐시만으로 타입 검사를 하려면 위 `check`
 명령에 `--deny-import` 를 더해 원격 import 를 막습니다.
 
-최근 오프라인 결과(Deno 2.7.12): **26개 통과, 0개 실패**(편지 11개, FCM·dispatch 13개, 발송 호출자 검사
+초기 오프라인 결과(Deno 2.7.12): **26개 통과, 0개 실패**(편지 11개, FCM·dispatch 13개, 발송 호출자 검사
 2개), 모든 함수·실서버 시험을 포함한 **18개 TypeScript 파일의 `deno check` 오류 0개**.
+
+S1·S2 최종 캐시 전용 전체 시험: **95개 통과, 0개 실패, 통합 66개 건너뜀**. 새 시험 이름과 결정·권한은
+[S1·S2 구현 보고](S1_S2_REPORT.md)에 있습니다. 원격 통합 시험의 통과를 뜻하지 않습니다.
+
+## S1·S2 데이터 계약과 RPC
+
+| RPC | 호출자 / 동작 |
+| --- | --- |
+| `set_share_options(uuid,text,boolean,boolean)` | 본인 운전자·연결된 차. `p_drive_done=null`은 끄기, `each`/`evening`은 직접 선택. 두 boolean의 null은 `choice_required`. |
+| `report_drive_end(text,timestamptz,integer,boolean)` | 본인 운전자·연결된 차. 나들이 숫자 키, 종료 시각, 1~1440분, 쉼 여부만 저장. 5분 넘는 미래는 거절. |
+| `retract_drive(text)` | 본인 운전자·연결된 차. 카드와 대기 알림을 거둡니다. 재전송해도 철회는 유지됩니다. |
+| `get_family_drive_events()` | 가족만. 켜진 공유의 최근 14일 기록, 유예 적용 없음. |
+| `get_family_weekly()` / `get_family_habits()` | 가족만. 해당 항목 동의·링크·일시중지·유예를 검사한 최근 12주 집계. |
+| 기존 `get_sharing_state()` / `preview_family_view(uuid)` | 본인 운전자·연결된 차. 공유 선택과 실제 가족 화면을 반환. |
+
+위 공개 RPC는 `authenticated`에만 실행 권한을 주며 함수 안에서 역할·소유자를 확인합니다.
+`family_drive_events_for`, `family_weekly_for`, `family_habits_for`와 enqueue 트리거는 앱 호출 권한이 없습니다.
+순수 검사 `valid_weekly_json(jsonb,jsonb)`만 authenticated/service_role에 실행을 허용합니다.
+`drive_evening_date(timestamptz)`·`kst_week_start(timestamptz)`는 서비스 롤 및 내부 함수용입니다. 새 definer 함수의 `search_path`는 빈 값입니다.
+`share_options`·`drive_events`는 RLS 정책 없이 RPC로만 접근합니다. 주간 표는 운전자 본인·연결된 차만
+SELECT/INSERT/UPDATE할 수 있고 가족은 위 RPC로만 읽습니다.
+
+- 알림 종류: 기존 `stage`, `drive_done`, `drive_evening`, `weekly_change`. 실제 FCM 전송은
+  모두 `data.kind`와 해당 한국어 문구를 포함하며 전송 직전과 기기 사이에 동의를 다시 읽습니다.
+- `drive_done`은 6시간 넘은 기록을 보내지 않습니다. 오래된 업로드는 더 최근 나들이의 큐를 밀어내지
+  않고, 같은 내용 재전송은 큐를 추가하지 않습니다. 새 초대를 수락하면 새 공유 선택은 다시 꺼짐입니다.
+- 저녁 모음은 **전날 20:00 이상~당일 20:00 미만(KST)**의 철회되지 않은 기록을 셉니다.
+  정확히 20:00부터 다음 날 모음입니다. 의도적으로 다음 날 보내는 저녁 모음에는 6시간 제한을 적용하지
+  않습니다. 대신 **예정 20시부터 6시간**이 지나면 발송을 거부하고, 이미 지난 버킷의 늦은 업로드도
+  큐를 만들지 않습니다. 큐의 `month`도 KST 월이며, 기존 매분 cron·7일 만료 작업을 재사용합니다.
+- 월간 요약 FK는 생성 열 `stage_month`에 걸어 기존 stage 삭제 연쇄를 유지합니다. 다른 알림은 월간
+  요약 없이도 저장할 수 있습니다. 월간 트리거와 공유 유예 수정은 종류별로만 큐를 갱신합니다.
+- 주간 `week_start`는 KST 월요일 날짜이며 현재 주를 포함한 12주를 반환합니다. 유예는 수신 시각부터
+  정확한 24시간 단위입니다. 내용 변경은 서버 시각으로 유예를 다시 시작하고 동일 재전송은 보존합니다.
+- `weekly_changes.domains`: `MOBILITY`/`WAYFINDING`/`OPERATION` 배열(1~3개).
+  `top`: 최대 3개의 `{ "feature": "M1", "direction": "down" }` 객체입니다.
+  feature는 기존 지표 ID 허용 목록, direction은 `up`/`down`만 받습니다. 자유문장·추가 키는 거절합니다.
+- `weekly_habits.story`: 60자 이하. 좌표 및 장소 이름이 들어갈 자유 입력을 막기 위해 빈 문자열 또는
+  `이번 주 운전 기록을 함께 돌아보세요`, `이번 주에도 쉬어 가며 운전했어요`, `방향지시등을 모두 켰어요`,
+  `운전 약속을 모두 지켰어요`, `이번 주 N번 운전했어요`(N은 1~3자리 숫자)만 허용합니다.
+- 미리보기의 `drive_events`, `weekly`, `habits`는 데이터 배열입니다. S1의 boolean `habits`와 이름이
+  겹치므로 선택 값은 `options.{drive_done,weekly_change,habits}`로 모두 제공합니다. 수신자 객체의
+  `habits`는 기존 계획대로 boolean입니다.
+
+원격 적용 시 0011 → 0012 순서로 적용한 뒤 `dispatch-notifications`를 다시 배포해야 합니다.
+`drive_events`·`weekly`·기존 `controls`/`notify` 통합 시험, RLS/ACL, 조건부 FK, 수신 시각 트리거,
+KST 20시·월요일 경계, 실제 기기의 `data.kind` 화면 이동을 확인합니다.
+
+```sh
+DENO_DIR=../.cache/deno deno test -A --frozen --cached-only tests/
+```
 
 ## 새 프로젝트에 적용하는 순서
 
 1. 승인된 개발용 Supabase 프로젝트에서 익명 로그인 활성화, 이메일 로그인 설정 확인. `0001`부터
-   `0010`까지 순서대로 적용합니다. **아래 SQL 전제와 RLS를 실서버에서 먼저 확인합니다.**
+   `0012`까지 순서대로 적용합니다. **아래 SQL 전제와 RLS를 실서버에서 먼저 확인합니다.**
 2. 로컬 `server/.env.test`에 `.env.test.example`의 세 이름에 대응하는 값을 직접 설정합니다. 이
    파일은 저장소 루트 `.gitignore`에서 이미 제외됩니다. 파일·토큰 내용을 로그에 출력하지 않습니다.
 3. Vault `vault.decrypted_secrets`에 `service_role_key`, `project_url` 이름의 비밀값이 각각 하나씩
@@ -85,7 +140,7 @@ Deno 2.7.12 의 `check` 에는 `--cached-only` 옵션이 없습니다. 캐시만
    보내지 않습니다. 실행 도중 종료하면 시험 계정이나 파일이 남을 수 있으므로 개발 프로젝트에서 정리합니다.
 
 ```sh
-deno test -A --frozen --env-file=.env.test tests/smoke.test.ts tests/rls.test.ts tests/rpc.test.ts tests/notify.test.ts tests/storage.test.ts tests/controls.test.ts
+deno test -A --frozen --env-file=.env.test tests/smoke.test.ts tests/rls.test.ts tests/rpc.test.ts tests/notify.test.ts tests/storage.test.ts tests/controls.test.ts tests/drive_events.test.ts tests/weekly.test.ts
 ```
 
    배포된 함수를 실제로 부르는 시험은 파일마다 따로 돌립니다(같은 `--env-file=.env.test` 필요).

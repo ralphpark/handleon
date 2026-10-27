@@ -121,6 +121,9 @@ test("a car controls only its own driver and revoke-all ends every share", async
     scope: "trend",
     delay_days: 7,
     share_pattern: false,
+    drive_done: null,
+    weekly_change: false,
+    habits: false,
   }]);
   assertEquals(ok(await car.client.rpc("revoke_all_shares")), 1);
   assertEquals(ok(await car.client.rpc("get_sharing_state")).recipients, []);

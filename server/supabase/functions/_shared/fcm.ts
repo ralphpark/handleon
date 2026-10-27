@@ -1,3 +1,11 @@
+import type { NotificationKind } from "./dispatch.ts";
+
+export interface NotificationNote {
+  title: string;
+  body: string;
+  kind: NotificationKind;
+}
+
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const SCOPE = "https://www.googleapis.com/auth/firebase.messaging";
 const encoder = new TextEncoder();
@@ -76,9 +84,16 @@ export async function accessToken(
   return body.access_token;
 }
 
-export function message(token: string): object {
+export function message(token: string, note?: NotificationNote): object {
   return {
-    message: { token, notification: { title: "핸들온", body: "새 운전 요약이 도착했어요" } },
+    message: {
+      token,
+      notification: {
+        title: note?.title ?? "핸들온",
+        body: note?.body ?? "새 운전 요약이 도착했어요",
+      },
+      ...(note ? { data: { kind: note.kind } } : {}),
+    },
   };
 }
 
@@ -87,13 +102,14 @@ export async function sendMessage(
   access: string,
   token: string,
   fetchImpl: typeof fetch = fetch,
+  note?: NotificationNote,
 ): Promise<void> {
   const response = await fetchImpl(
     `https://fcm.googleapis.com/v1/projects/${encodeURIComponent(project)}/messages:send`,
     {
       method: "POST",
       headers: { "Authorization": `Bearer ${access}`, "Content-Type": "application/json" },
-      body: JSON.stringify(message(token)),
+      body: JSON.stringify(message(token, note)),
       signal: AbortSignal.timeout(20_000),
     },
   );
