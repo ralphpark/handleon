@@ -40,6 +40,17 @@
 - `0013_weekly_quiet_weeks_stop_drive.sql`: 평소와 같은 주는 영역 없이 올릴 수 있음(표시된 주는 영역 1개 이상), 차가 모든 가족의 운전 마침 소식을 한 번에 끄는 `stop_drive_notices()`.
 - `0014_coach.sql`: 가족에게 현재 보이는 값만 모으는 코치 문맥, KST 하루 5회 제한과 같은 문맥 캐시.
   `coach_context_for`·`begin_coach_request`·`finish_coach_request`는 서비스 롤 전용이며 새 표는 RLS를 켭니다.
+- `0015_federated.sql`: 기본 꺼짐인 `fed_opt_in`, 15개 가중치 모델·차분, 참여/제출/모델 조회 RPC.
+  차분은 유한 숫자 15개·각 성분 ±1 이하, 표본 수는 1~520입니다. 참여 철회 시 현재 라운드 제출분을 제거합니다.
+- `supabase/functions/fed-average/index.ts`: 서비스 롤 전용 FedAvg. 두 클라이언트 이상이면 표본 수로
+  가중 평균한 차분을 이전 가중치에 더하고, 저장 직전에 참여·입력·라운드를 다시 확인합니다.
+- 새 cron `handleon-fed-average`: UTC `40 18 * * *` = 매일 **03:40 KST**. 기존 Vault의
+  `project_url`·`service_role_key`를 재사용합니다. `0015` 적용 후 `fed-average`를 `verify_jwt=true`로 배포합니다.
+  Edge 비밀은 `SUPABASE_URL`·`SUPABASE_SERVICE_ROLE_KEY`이며 LLM 키는 필요하지 않습니다.
+  `self`·`virtual-1`·`virtual-2`는 `(driver_id, client_tag)`별 클라이언트로 세므로 가상 태그를 쓴 시연은
+  실제 운전자 수와 다릅니다. 서버는 S5 계약의 성분별 클리핑 범위를 검사하며 E9의 L2 클리핑은 차에서 수행합니다.
+  `tests/fed.test.ts`는 클로드가 개발 프로젝트에서 실행합니다. 라운드 진행 시험은 모델 이력을 되돌리지
+  않으므로 다른 제출분이 없는 라운드에서 실행해야 합니다. 엔진 대조 시험값은 `tests/fixtures/fedavg.json`입니다.
 - `supabase/functions/conversation-coach/index.ts`: 가족 JWT → 공유 문맥 → 말문 3개·피할 말 2개·이야깃거리.
 - `supabase/functions/clinic-summary/index.ts`: 운전자 본인 JWT → 최근 6개월/8주/12주 집계 → 600자 요약과 질문 3개.
 - `supabase/functions/monthly-letter/index.ts`: 차량 인증 → 편지 생성 → 해당 운전자의 월 요약 저장.
