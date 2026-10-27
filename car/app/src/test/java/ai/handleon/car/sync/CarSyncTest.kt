@@ -110,7 +110,7 @@ class CarSyncTest {
         state.setDriver("driver"); repo.saved += patternTrip()
         for (m in Mode.entries) {
             mode = m
-            server.reply("""[{"driver_id":"driver"}]"""); server.reply("[]"); server.reply("", 201)
+            server.reply("""[{"driver_id":"driver"}]"""); server.reply("[]"); server.reply("", 201); server.reply("", 201)
             assertTrue(sync().syncOnce().synced)
             repeat(2) { server.takeRequest() }
             val request = server.takeRequest()
@@ -119,6 +119,7 @@ class CarSyncTest {
             assertEquals("car", row["source"]!!.jsonPrimitive.content)
             assertEquals(1, row["trips"]!!.jsonPrimitive.int)
             assertEquals(JsonNull, row["usual_trips"])
+            assertEquals("/rest/v1/weekly_habits", server.takeRequest().requestUrl!!.encodedPath)
         }
     }
 
@@ -127,12 +128,13 @@ class CarSyncTest {
         repo.saved += patternTrip().copy(maxFromHomeKm = 8.0, endCell = 1)
         repo.saveReport("LONG", Json.encodeToString(longReport().copy(baselines =
             mapOf(FeatureId.M7 to Baseline(4.0, 1.0), FeatureId.M5 to Baseline(2.0, 1.0)))))
-        server.reply("""[{"driver_id":"driver"}]"""); server.reply("[]"); server.reply("", 201)
+        server.reply("""[{"driver_id":"driver"}]"""); server.reply("[]"); server.reply("", 201); server.reply("", 201)
         sync().syncOnce()
         repeat(2) { server.takeRequest() }
         val row = Json.parseToJsonElement(server.takeRequest().body.readUtf8()).jsonArray.single().jsonObject
         assertEquals(2.0, row["radius_ratio"]!!.jsonPrimitive.double)
         assertEquals(0.5, row["places_ratio"]!!.jsonPrimitive.double)
+        assertEquals("/rest/v1/weekly_habits", server.takeRequest().requestUrl!!.encodedPath)
     }
 
     @Test fun unlinkedAndUnconfiguredNeverContactServer() = runTest {

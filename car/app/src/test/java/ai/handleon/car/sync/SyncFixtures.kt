@@ -1,6 +1,6 @@
 package ai.handleon.car.sync
 
-import ai.handleon.car.store.TripStore
+import ai.handleon.car.store.*
 import ai.handleon.driveprint.*
 import java.time.LocalDate
 import java.time.YearMonth
@@ -43,7 +43,12 @@ internal class MemoryTrips : TripStore {
         saved += f
         return true
     }
-    override suspend fun trips() = saved.toList()
+    val drivers = mutableMapOf<Long, DriverStatus>()
+    override suspend fun trips() = ownerTrips(saved.toList(), drivers)
+    override suspend fun setDriver(startMs: Long, status: DriverStatus, observation: ai.handleon.driveprint.DriverObservation?, nowMs: Long) { drivers[startMs] = status }
+    override suspend fun pendingTrips() = saved.filter { drivers[it.startMs] == DriverStatus.PENDING }
+    override suspend fun driverStatuses() = drivers.toMap()
+    override suspend fun answerDriver(startMs: Long, isOwner: Boolean, nowMs: Long) { drivers[startMs] = if (isOwner) DriverStatus.OWNER else DriverStatus.OTHER }
     override suspend fun labels() = emptyMap<LocalDate, String>()
     override suspend fun setLabel(day: LocalDate, kind: String?) = Unit
     override suspend fun resets() = emptyList<Pair<LocalDate, String>>()

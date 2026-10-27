@@ -3,6 +3,7 @@ package ai.handleon.car.ui
 import ai.handleon.car.collect.DriveSessionView
 import ai.handleon.car.engine.Mode
 import ai.handleon.car.sync.patternTrip
+import java.time.ZonedDateTime
 import java.time.Instant
 import java.time.LocalDate
 import kotlin.test.*
@@ -90,5 +91,55 @@ class HomeCardTest {
         val finished = restTimerTick(1000, 1000, driving = false, resumed = true)
         assertTrue(finished.notify); assertTrue(finished.finished); assertNull(finished.endMs)
         assertFalse(restTimerTick(finished.endMs, 2000, driving = false, resumed = true).notify)
+    }
+    @Test fun `driver check outranks note and trip`() {
+        val check = HomeCard.DriverCheck(1, 12)
+        assertEquals(check, topCard(HomeInputs(driverCheck = check, note = note, trip = HomeCard.Trip("12분"))))
+    }
+    @Test fun `rest still outranks everything`() {
+        val rest = RestUi()
+        assertEquals(HomeCard.Rest(rest), topCard(HomeInputs(rest = rest, driverCheck = HomeCard.DriverCheck(1, 1),
+            confirm = PendingConfirm.PauseSharing, lostWay = 1, note = note, trip = HomeCard.Trip("12분"), week = "한 주")))
+    }
+    @Test fun `week card only sunday evening to monday`() {
+        fun visible(time: String, dismissed: String? = null) = weekCardVisible(ZonedDateTime.parse(time), dismissed)
+        assertFalse(visible("2026-10-25T17:59:59+09:00"))
+        assertTrue(visible("2026-10-25T18:00:00+09:00"))
+        assertTrue(visible("2026-10-26T23:59:59+09:00"))
+        assertFalse(visible("2026-10-27T00:00:00+09:00"))
+        assertFalse(visible("2026-10-26T12:00:00+09:00", "2026-10-19"))
+        assertTrue(visible("2026-10-25T09:00:00Z"))
+    }
+    @Test fun `sharing banner shows only when someone receives`() {
+        assertNull(sharingBanner(0)); assertEquals("운전 마침 소식을 1명에게 보내고 있어요", sharingBanner(1))
+    }
+    @Test fun `confirm card outranks lost way and note`() {
+        assertEquals(HomeCard.Confirm(PendingConfirm.MarkOtherDriver), topCard(HomeInputs(
+            confirm = PendingConfirm.MarkOtherDriver, lostWay = 1, note = note)))
+    }
+    @Test fun `confirmed actions run once and cancellation does nothing`() = kotlinx.coroutines.test.runTest {
+        var marked = 0; var paused = 0
+        runConfirmed(null, { marked++ }, { paused++ })
+        assertEquals(0, marked + paused)
+        runConfirmed(PendingConfirm.MarkOtherDriver, { marked++ }, { paused++ })
+        assertEquals(1, marked); assertEquals(0, paused)
+        runConfirmed(PendingConfirm.PauseSharing, { marked++ }, { paused++ })
+        assertEquals(1, marked); assertEquals(1, paused)
+    }
+    @Test fun `resume and promises are always hidden by the driving screen`() {
+        for (screen in listOf(Screen.Resume, Screen.Promises)) assertTrue(showDrivingScreen(true, true, screen))
+    }
+    @Test fun `failed confirmation cannot retarget the previous trip on retry`() = kotlinx.coroutines.test.runTest {
+        var pending: PendingConfirm? = PendingConfirm.MarkOtherDriver
+        val remaining = mutableListOf(1L, 2L)
+        assertFailsWith<java.io.IOException> {
+            runConfirmed(pending, {
+                remaining.removeLast()
+                throw java.io.IOException("retraction not acknowledged")
+            }, {}, consume = { pending = null })
+        }
+        runConfirmed(pending, { remaining.removeLast() }, {}, consume = { pending = null })
+        assertEquals(listOf(1L), remaining)
+        assertNull(pending)
     }
 }

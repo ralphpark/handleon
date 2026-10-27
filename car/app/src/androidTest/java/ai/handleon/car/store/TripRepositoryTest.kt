@@ -123,6 +123,20 @@ class TripRepositoryTest {
         assertEquals("{\"status\":\"OK\"}", repo.report("CONDITION"))
     }
 
+    @Test fun driverFilteringAndAnswersSurviveReload() = runTest {
+        val now = java.time.Instant.parse("2026-10-21T16:00:00Z").toEpochMilli()
+        val trips = (1L..4).map { t1.copy(startMs = now - it, endMs = now) }
+        trips.forEach { repo.saveTrip(it) }
+        repo.setDriver(trips[0].startMs, DriverStatus.OWNER, null, now)
+        repo.setDriver(trips[1].startMs, DriverStatus.PENDING, null, now)
+        repo.setDriver(trips[2].startMs, DriverStatus.OTHER, null, now)
+        assertEquals(listOf(trips[3], trips[0]), repo.trips())
+        assertEquals(listOf(trips[1]), repo.pendingTrips())
+        repo.answerDriver(trips[1].startMs, true, now)
+        assertEquals(3, repo.trips().size)
+        assertTrue(repo.pendingTrips().isEmpty())
+    }
+
     private val t1 = TripFeatures(
         startMs = 10, endMs = 20, source = Source.CAR, distanceKm = 12.5,
         night = false, rain = true, offDay = false, endCell = 123456789012L,

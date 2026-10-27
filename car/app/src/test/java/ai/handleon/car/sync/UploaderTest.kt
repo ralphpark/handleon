@@ -119,4 +119,72 @@ class UploaderTest {
         Uploader(server.client()).upload("driver", report)
         assertEquals("driver_id,day", server.takeRequest().requestUrl!!.queryParameter("on_conflict"))
     }
+    private val monday = LocalDate.of(2026, 10, 19)
+    private fun summary() = HabitSummary(monday, monday.plusWeeks(1), 4, 200, 3, 4, 1, 0, 3, 0, 1, null, "월요일에 가장 오래 운전하셨어요")
+    @Test fun `weekly rows skip excluded weeks`() {
+        val weeks = (0L..14L).map { WeekResult(monday.minusWeeks(it), emptySet(), false, it == 1L) }
+        val r = WeeklyReport(WeeklyStatus.OK, weeks.reversed(), null, 0, emptyList())
+        val rows = weeklyChangeRows("driver", r, "car")
+        assertEquals(11, rows.size)
+        assertEquals(monday.minusWeeks(11).toString(), rows.first().jsonObject["week_start"]!!.jsonPrimitive.content)
+        assertTrue(rows.all { it.jsonObject["domains"]!!.jsonArray.isEmpty() })
+    }
+    @Test fun `flagged baseline exclusions still upload with exact domains and top contract`() {
+        val week = WeekResult(monday, setOf(Domain.MOBILITY), true, true)
+        val r = WeeklyReport(WeeklyStatus.FLAGGED, listOf(week.copy(weekStart = monday.minusWeeks(1)), week), null, 0,
+            listOf(Contribution(FeatureId.M1, -1.0, 1.0), Contribution(FeatureId.W2, 0.0, 1.0)))
+        val rows = weeklyChangeRows("driver", r, "car")
+        val row = rows.last().jsonObject
+        assertEquals(setOf("driver_id", "week_start", "flagged", "domains", "top", "source"), row.keys)
+        assertEquals("MOBILITY", row["domains"]!!.jsonArray.single().jsonPrimitive.content)
+        val top = row["top"]!!.jsonArray
+        assertEquals(setOf("feature", "direction"), top.first().jsonObject.keys)
+        assertEquals("down", top[0].jsonObject["direction"]!!.jsonPrimitive.content)
+        assertEquals("up", top[1].jsonObject["direction"]!!.jsonPrimitive.content)
+        assertTrue(rows.first().jsonObject["top"]!!.jsonArray.isEmpty())
+    }
+    @Test fun `habit rows keep kept less than or equal to total`() {
+        val bad = summary().copy(trips = 999, minutes = Int.MAX_VALUE, signalKept = 100, signalTotal = -1,
+            hardBrakes = -5, hardAccels = -2, calmTrips = 999, nightTrips = 999, longStretches = -1)
+        val row = weeklyHabitRows("driver", listOf(bad to listOf(PromiseResult(Promise.NO_NIGHT, Int.MAX_VALUE, Int.MAX_VALUE))), "car").single().jsonObject
+        assertEquals(200, row["trips"]!!.jsonPrimitive.int)
+        assertEquals(10080, row["minutes"]!!.jsonPrimitive.int)
+        assertEquals(0, row["signal_kept"]!!.jsonPrimitive.int)
+        assertEquals(0, row["signal_total"]!!.jsonPrimitive.int)
+        assertEquals(200, row["calm_trips"]!!.jsonPrimitive.int)
+        assertEquals(200, row["night_trips"]!!.jsonPrimitive.int)
+        assertTrue(row["promises_kept"]!!.jsonPrimitive.long <= row["promises_total"]!!.jsonPrimitive.long)
+        assertEquals(0, row["hard_brakes"]!!.jsonPrimitive.int)
+    }
+    @Test fun `habit rows carry no coordinates`() {
+        val row = weeklyHabitRows("driver", listOf(summary() to emptyList()), "car").single().jsonObject
+        assertEquals(setOf("driver_id", "week_start", "trips", "minutes", "signal_kept", "signal_total", "hard_brakes", "hard_accels",
+            "calm_trips", "long_stretches", "night_trips", "promises_kept", "promises_total", "story", "source"), row.keys)
+        assertTrue(row.values.all { it is JsonPrimitive && (it.longOrNull != null || (it.isString && it.content.length <= 60)) })
+    }
+    @Test fun `upload story selects only server templates and ignores display story`() {
+        val h = summary().copy(story = "임의 장소 37.500 127.100")
+        assertEquals("이번 주 4번 운전했어요", uploadHabitStory(h, emptyList()))
+        assertEquals("", uploadHabitStory(h.copy(trips = 0), emptyList()))
+        assertEquals("방향지시등을 모두 켰어요", uploadHabitStory(h.copy(signalKept = 4), emptyList()))
+        assertEquals("운전 약속을 모두 지켰어요", uploadHabitStory(h, listOf(PromiseResult(Promise.NO_NIGHT, 1, 0))))
+    }
+    @Test fun `habit rows keep only eight recent weeks`() {
+        val weeks = (0L..10L).map { summary().copy(from = monday.minusWeeks(it), toExclusive = monday.minusWeeks(it).plusWeeks(1)) to emptyList<PromiseResult>() }
+        assertEquals(8, weeklyHabitRows("driver", weeks, "car").size)
+    }
+    @Test fun `weekly upserts use week conflict keys`() = runTest {
+        val server = MockWebServer()
+        try {
+            server.reply("", 201); server.reply("", 201)
+            val uploader = Uploader(server.client())
+            uploader.uploadWeeklyChanges("driver", WeeklyReport(WeeklyStatus.OK, listOf(WeekResult(monday, emptySet(), false, false)), null, 0, emptyList()), "car")
+            uploader.uploadWeeklyHabits("driver", listOf(summary() to emptyList()), "car")
+            for (table in listOf("weekly_changes", "weekly_habits")) {
+                val request = server.takeRequest()
+                assertEquals("/rest/v1/$table", request.requestUrl!!.encodedPath)
+                assertEquals("driver_id,week_start", request.requestUrl!!.queryParameter("on_conflict"))
+            }
+        } finally { server.shutdown() }
+    }
 }

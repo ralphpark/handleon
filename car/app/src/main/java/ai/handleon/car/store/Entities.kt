@@ -26,3 +26,8 @@ data class PlaceEntity(val cell: Long, val kind: String, val lat: Double, val lo
 
 @Entity(tableName = "reports")
 data class ReportEntity(@PrimaryKey val kind: String, val json: String, val updatedMs: Long)
+
+@Entity(tableName = "trip_drivers")
+data class TripDriverEntity(@PrimaryKey val startMs: Long, val status: String,
+                            val observationJson: String?, val decidedMs: Long?)
+enum class DriverStatus { OWNER, PENDING, OTHER }

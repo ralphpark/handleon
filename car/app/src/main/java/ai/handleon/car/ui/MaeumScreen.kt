@@ -28,6 +28,10 @@ fun MaeumScreen(ui: MaeumUi, onLabels: () -> Unit = {}, onSettings: () -> Unit =
             if (wide) SegmentedControl(if (ui.pastSelected) 1 else 0, { onTab(it == 1) })
         }
         homeCard()
+        if (!ui.pastSelected) {
+            ui.readiness?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = DarkTokens.brand) }
+            ui.weekly?.let { Text(it, style = MaterialTheme.typography.bodyMedium, color = DarkTokens.ink) }
+        }
         if (!wide) SegmentedControl(if (ui.pastSelected) 1 else 0, { onTab(it == 1) })
         if (ui.pastSelected) {
             GlassPanel(Modifier.fillMaxWidth(), padding = 32.dp) { TrendChart(ui.months, ui.thresholds, ui.baselineWindows) }

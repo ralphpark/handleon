@@ -58,3 +58,11 @@ interface ReportDao {
     @Query("SELECT * FROM reports WHERE kind = :kind")
     suspend fun get(kind: String): ReportEntity?
 }
+
+@Dao
+interface TripDriverDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun put(driver: TripDriverEntity)
+    @Query("SELECT * FROM trip_drivers ORDER BY startMs")
+    suspend fun all(): List<TripDriverEntity>
+}

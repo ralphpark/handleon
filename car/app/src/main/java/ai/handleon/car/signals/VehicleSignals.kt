@@ -1,6 +1,11 @@
 package ai.handleon.car.signals
 
 import ai.handleon.driveprint.TelltaleOn
+import ai.pleos.playground.vehicle.api.model.area.SeatArea
+import ai.pleos.playground.vehicle.constant.area.SeatValue
+import ai.pleos.playground.vehicle.listener.SeatForeAftPositionListener
+import ai.pleos.playground.vehicle.listener.SeatHeightPositionListener
+import ai.pleos.playground.vehicle.listener.SeatBackrestAnglePositionListener
 import ai.pleos.playground.vehicle.Vehicle
 import ai.pleos.playground.vehicle.api.model.area.WindowArea
 import ai.pleos.playground.vehicle.api.model.telltale.Telltales
@@ -63,6 +68,31 @@ class VehicleSignals(context: Context, private val sink: LatestSignals) {
             wiper.registerWiperState(front, object : WiperStateListener {
                 override fun onWiperStateUpdated(state: WiperState?) = sink.set(Key.WIPER, state.toWiperOn())
                 override fun onFailed(e: Exception) = fail("와이퍼", e)
+            })
+        }
+        val driverSeat = SeatArea(SeatValue.ROW_1_LEFT)
+        guard("시트 앞뒤") {
+            val seat = vehicle.getSeat()
+            seat.getCurrentSeatForeAftPosition(driverSeat, { sink.set(Key.SEAT_FORE_AFT, it) }, { sink.set(Key.SEAT_FORE_AFT, null); fail("시트 앞뒤", it) })
+            seat.registerSeatForeAftPosition(driverSeat, object : SeatForeAftPositionListener {
+                override fun onSeatForeAftPositionUpdated(position: Int?) = sink.set(Key.SEAT_FORE_AFT, position)
+                override fun onFailed(e: Exception) { sink.set(Key.SEAT_FORE_AFT, null); fail("시트 앞뒤", e) }
+            })
+        }
+        guard("시트 높이") {
+            val seat = vehicle.getSeat()
+            seat.getCurrentSeatHeightPosition(driverSeat, { sink.set(Key.SEAT_HEIGHT, it) }, { sink.set(Key.SEAT_HEIGHT, null); fail("시트 높이", it) })
+            seat.registerSeatHeightPosition(driverSeat, object : SeatHeightPositionListener {
+                override fun onSeatHeightPositionUpdated(position: Int?) = sink.set(Key.SEAT_HEIGHT, position)
+                override fun onFailed(e: Exception) { sink.set(Key.SEAT_HEIGHT, null); fail("시트 높이", e) }
+            })
+        }
+        guard("시트 등받이") {
+            val seat = vehicle.getSeat()
+            seat.getCurrentSeatBackrestAnglePosition(driverSeat, { sink.set(Key.SEAT_BACKREST, it) }, { sink.set(Key.SEAT_BACKREST, null); fail("시트 등받이", it) })
+            seat.registerSeatBackrestAnglePosition(driverSeat, object : SeatBackrestAnglePositionListener {
+                override fun onSeatBackrestAnglePositionUpdated(position: Int?) = sink.set(Key.SEAT_BACKREST, position)
+                override fun onFailed(e: Exception) { sink.set(Key.SEAT_BACKREST, null); fail("시트 등받이", e) }
             })
         }
         val safety = vehicle.getSafety()

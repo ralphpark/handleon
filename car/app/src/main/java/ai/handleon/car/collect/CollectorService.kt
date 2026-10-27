@@ -7,6 +7,10 @@ import ai.handleon.car.signals.LatestSignals
 import ai.handleon.car.signals.LocationSignals
 import ai.handleon.car.signals.NaviSignals
 import ai.handleon.car.signals.VehicleSignals
+import ai.handleon.driveprint.DriverObservation
+import ai.handleon.driveprint.Style
+import ai.handleon.car.sync.SyncWorker
+import kotlinx.serialization.json.Json
 import ai.handleon.driveprint.Features
 import ai.handleon.driveprint.RawTrip
 import ai.handleon.driveprint.TripSegmenter
@@ -51,6 +55,27 @@ class CollectorService : Service() {
     private lateinit var navi: NaviSignals
     private val checkpoint by lazy { File(filesDir, "segmenter.json") }
     private var started = false
+    private var driverCapture = DriverCapture()
+    private var lastSampleMs: Long? = null
+    private var otherRequestId: String? = null
+    private var resumeNewDeparture = false
+    private fun restoreCheckpoint(text: String) {
+        val saved = runCatching { Json.decodeFromString<CollectionCheckpoint>(text) }.getOrNull()
+        if (saved != null) {
+            segmenter.restore(saved.segmenter); driverCapture = saved.driver; lastSampleMs = saved.lastSampleMs
+            otherRequestId = saved.otherRequestId
+            otherRequestId?.let { request -> runCatching { (application as HandleOnApp).graph.consumeNextIsOther(request) } }
+            resumeNewDeparture = saved.needsNewDeparture((application as HandleOnApp).graph.otherDriverRequest())
+        } else {
+            segmenter.restore(text) // v1 checkpoint: never substitute a mid-trip seat for the missing departure read.
+            segmenter.current()?.let { driverCapture = DriverCapture(captured = true); lastSampleMs = it.samples.lastOrNull()?.tMs }
+            resumeNewDeparture = driverCapture.captured && (application as HandleOnApp).graph.nextIsOther()
+        }
+    }
+    private fun writeCheckpoint() {
+        saveCollectionCheckpoint(filesDir, CollectionCheckpoint(segmenter.snapshot(), driverCapture, lastSampleMs, otherRequestId),
+            (application as HandleOnApp).graph::consumeNextIsOther)
+    }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -67,7 +92,7 @@ class CollectorService : Service() {
         }
         started = true
         running.value = true
-        runCatching { if (checkpoint.exists()) segmenter.restore(checkpoint.readText()) }
+        runCatching { if (checkpoint.exists()) restoreCheckpoint(checkpoint.readText()) }
             .onFailure { Log.w(TAG, "체크포인트 복원 실패, 새로 시작: $it"); checkpoint.delete() }
         vehicle = VehicleSignals(this, signals).also { it.start() }
         car = CarSignals(this, signals).also { it.start() }
@@ -90,7 +115,8 @@ class CollectorService : Service() {
                 scope.coroutineContext[Job]?.join()
                 segmenter.flush()?.let { save(it) }
             }
-            checkpoint.delete()
+            runCatching { clearCollectorCheckpoints(filesDir) }
+                .onFailure { Log.w(TAG, "체크포인트 삭제 실패") }
         } finally {
             liveState.value = null
             running.value = false
@@ -115,10 +141,23 @@ class CollectorService : Service() {
             if (sessionState.value != session.view) sessionState.value = session.view
             if (sample != null && sample.tMs != lastTick) {
                 lastTick = sample.tMs
+                if (resumeNewDeparture || lastSampleMs?.let { sample.tMs - it > 300_000 } == true) {
+                    segmenter.flush()?.let { save(it) }
+                    driverCapture.clear()
+                    otherRequestId = null
+                    resumeNewDeparture = false
+                }
+                val request = graph.otherDriverRequest()
+                if (driverCapture.beforeSample(sample, snapshot, request != null)) otherRequestId = request
                 segmenter.push(sample)?.let { save(it) }
+                driverCapture.afterSample(sample)
+                lastSampleMs = sample.tMs
+                if (!driverCapture.captured) otherRequestId = null
+                // A failed write keeps the request set; retry on the next sample before acknowledging it.
+                if (otherRequestId != null && otherRequestId == graph.otherDriverRequest()) runCatching { writeCheckpoint() }
                 if (DEBUG_LOG) Log.d(TAG, "샘플 $sample")
             }
-            if (++n % 30 == 0) runCatching { checkpoint.writeText(segmenter.snapshot()) }
+            if (++n % 30 == 0) runCatching { writeCheckpoint() }
             if (graph.presentation()) {
                 try {
                     // current()·지표 계산 모두 이 틱에서만. 발표 모드 밖에서는 사본·DB 조회도 하지 않는다.
@@ -145,9 +184,11 @@ class CollectorService : Service() {
         val repo = graph.tripRepository
         runCatching {
             val features = Features.extract(trip, repo.home(), repo.familiarCells(), ZoneId.of("Asia/Seoul"))
-            repo.saveTrip(features)
+            val observation = DriverObservation(driverCapture.seat, Style.firstMinutes(trip.samples))
+            repo.saveCollectedTrip(features, observation, driverCapture.other, System.currentTimeMillis())
             Log.i(TRIP_TAG, "트립 저장: ${"%.1f".format(trip.distanceKm())} km")
             graph.engineRunner.run(graph.mode())
+            SyncWorker.enqueue(this)
         }.onFailure { Log.e(TRIP_TAG, "트립 저장 실패", it) }
     }
 

@@ -26,6 +26,8 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <uses-permission android:name="pleos.car.permission.CAR_SEATS" />
+
     <application
         android:name=".HandleOnApp"
         android:label="핸들온"

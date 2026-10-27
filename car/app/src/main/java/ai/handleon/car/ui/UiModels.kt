@@ -72,11 +72,11 @@ data class MaeumUi(
     val collectionText: String?, val homeHint: String?, val months: List<MonthResult>,
     val thresholds: Map<Domain, Double>, val baselineWindows: Map<FeatureId, BaselineWindow>,
     val pastSelected: Boolean = false, val blueLink: List<BlueLinkMonth> = emptyList(),
-    val letter: LetterUi? = null,
+    val letter: LetterUi? = null, val readiness: String? = null, val weekly: String? = null,
 ) {
     val visibleLetter: LetterUi? get() = letter.takeUnless { pastSelected }
     companion object {
-        fun from(report: LongReport?, home: LatLon?, progress: CollectionProgress? = null, letter: LetterUi? = null): MaeumUi {
+        fun from(report: LongReport?, home: LatLon?, progress: CollectionProgress? = null, letter: LetterUi? = null, weekly: WeeklyReport? = null, readiness: Readiness? = null): MaeumUi {
             val stage = report?.stage ?: Stage.BUILDING
             val last = report?.months?.lastOrNull()
             return MaeumUi(stage, Copy.stageTitle(stage), report?.onsetWeeksAgo?.let(Copy::onset),
@@ -85,7 +85,7 @@ data class MaeumUi(
                 ReasonUi.from(report?.top.orEmpty()), stage == Stage.TALK,
                 if (stage == Stage.BUILDING) progress?.let { "${it.months}개월 · ${it.trips}트립을 모았어요" } else null,
                 HOME_HINT.takeIf { home == null }, report?.months.orEmpty(), report?.thresholds.orEmpty(),
-                report?.baselineWindows.orEmpty(), letter = letter)
+                report?.baselineWindows.orEmpty(), letter = letter, readiness = readiness?.let(::readinessText), weekly = weekly?.let(::weeklyText))
         }
     }
 }

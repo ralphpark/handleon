@@ -6,7 +6,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-enum class Key { SPEED, GEAR, BRAKE, STEERING, SIGNAL, WIPER, POS, HEADING, LIMIT }
+enum class Key { SPEED, GEAR, BRAKE, STEERING, SIGNAL, WIPER, POS, HEADING, LIMIT, SEAT_FORE_AFT, SEAT_HEIGHT, SEAT_BACKREST }
 
 data class Stamped(val value: Any?, val atMs: Long)
 

@@ -17,15 +17,58 @@ data class RestUi(val remainingMs: Long? = null, val finished: Boolean = false) 
 
 sealed interface HomeCard {
     data class Rest(val ui: RestUi) : HomeCard
+    data class DriverCheck(val startMs: Long, val minutes: Int) : HomeCard
+    data class Confirm(val action: PendingConfirm) : HomeCard
+    data class LostWay(val tripStartMs: Long) : HomeCard
+    data class Trip(val line: String) : HomeCard
+    data class Week(val story: String) : HomeCard
     data class Note(val ui: CarNote) : HomeCard
     data class Line(val ui: TodayLineUi) : HomeCard
 }
 
-fun topCard(rest: RestUi?, note: CarNote?, line: TodayLineUi?): HomeCard? = when {
+sealed interface PendingConfirm {
+    data object MarkOtherDriver : PendingConfirm
+    data object PauseSharing : PendingConfirm
+}
+
+data class HomeInputs(val rest: RestUi? = null, val driverCheck: HomeCard.DriverCheck? = null,
+                      val confirm: PendingConfirm? = null, val lostWay: Long? = null, val note: CarNote? = null,
+                      val trip: HomeCard.Trip? = null, val week: String? = null, val line: TodayLineUi? = null)
+fun topCard(inputs: HomeInputs): HomeCard? = with(inputs) { when {
     rest != null -> HomeCard.Rest(rest)
+    driverCheck != null -> driverCheck
+    confirm != null -> HomeCard.Confirm(confirm)
+    lostWay != null -> HomeCard.LostWay(lostWay)
     note != null -> HomeCard.Note(note)
+    trip != null -> trip
+    week != null -> HomeCard.Week(week)
     line != null -> HomeCard.Line(line)
     else -> null
+} }
+fun topCard(rest: RestUi?, note: CarNote?, line: TodayLineUi?): HomeCard? =
+    topCard(HomeInputs(rest = rest, note = note, line = line))
+
+fun sharingBanner(recipientsWithDriveDone: Int): String? = ai.handleon.car.sync.DriveNotices.sharingLine(recipientsWithDriveDone)
+fun weekCardKey(now: java.time.ZonedDateTime): String {
+    val day = now.withZoneSameInstant(KST).toLocalDate()
+    val monday = day.minusDays(day.dayOfWeek.value - 1L)
+    return (if (day.dayOfWeek == java.time.DayOfWeek.MONDAY) monday.minusWeeks(1) else monday).toString()
+}
+fun weekCardVisible(now: java.time.ZonedDateTime, dismissedWeek: String?): Boolean {
+    val local = now.withZoneSameInstant(KST)
+    return dismissedWeek != weekCardKey(local) && (local.dayOfWeek == java.time.DayOfWeek.MONDAY ||
+        (local.dayOfWeek == java.time.DayOfWeek.SUNDAY && local.hour >= 18))
+}
+suspend fun runConfirmed(action: PendingConfirm?, markOther: suspend () -> Unit, pauseSharing: suspend () -> Unit,
+                         consume: () -> Unit = {}) {
+    if (action == null) return
+    // A network failure after a local mutation must not leave a live confirmation targeting the next trip.
+    consume()
+    when (action) {
+        PendingConfirm.MarkOtherDriver -> markOther()
+        PendingConfirm.PauseSharing -> pauseSharing()
+        null -> Unit
+    }
 }
 
 /** [dismissedStartMs]: "괜찮아요"를 누른 운전의 시작 시각. 그 운전에서는 다시 띄우지 않는다. */

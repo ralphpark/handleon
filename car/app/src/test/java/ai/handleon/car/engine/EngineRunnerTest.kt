@@ -1,7 +1,7 @@
 package ai.handleon.car.engine
 
 import ai.handleon.car.replay.ReplayParser
-import ai.handleon.car.store.TripStore
+import ai.handleon.car.store.*
 import ai.handleon.driveprint.FeatureId
 import ai.handleon.driveprint.Domain
 import ai.handleon.driveprint.ConditionReport
@@ -34,7 +34,7 @@ class EngineRunnerTest {
         assertNull(state.condition)
         assertEquals(state, runner.state.value)
         assertEquals(NOW.toInstant().toEpochMilli(), state.updatedMs)
-        assertEquals(setOf("LONG"), store.reports.keys)
+        assertEquals(setOf("LONG", "WEEKLY"), store.reports.keys)
         assertEquals(state.long, Json.decodeFromString<LongReport>(store.reports.getValue("LONG")))
     }
 
@@ -128,6 +128,22 @@ class EngineRunnerTest {
         assertEquals(previous, runner.state.value)
     }
 
+    @Test fun `weekly report and readiness use the same labels and resets`() = runTest {
+        val trips = load("father")
+        val store = MemoryStore(trips)
+        store.setLabel(LocalDate.of(2026, 10, 1), "SLEEP")
+        store.addReset(LocalDate.of(2026, 10, 1), "ALL")
+        val state = runner(store).run(Mode.MAEUM)
+        val engine = ai.handleon.driveprint.Driveprint()
+        val labels = store.labels().keys
+        val resets = setOf(ai.handleon.driveprint.Reset(LocalDate.of(2026, 10, 1), ai.handleon.driveprint.ResetKind.ALL))
+        val weekly = engine.weeklyReport(trips, labels, resets, NOW.toLocalDate())
+        assertEquals(weekly, state.weekly)
+        assertEquals(weekly, Json.decodeFromString<ai.handleon.driveprint.WeeklyReport>(store.reports.getValue("WEEKLY")))
+        assertEquals(engine.readiness(trips, weekly, NOW.toLocalDate(), labels, resets), state.readiness)
+        assertNull(runner(store).run(Mode.CONDITION).weekly)
+    }
+
     private fun load(persona: String) = ReplayParser.parse(File("src/main/assets/replay/$persona.json").readText()).trips
     private fun runner(store: TripStore, now: String = NOW.toString()) =
         EngineRunner(store, clock = { ZonedDateTime.parse(now) })
@@ -153,7 +169,12 @@ private class MemoryStore(trips: List<TripFeatures>) : TripStore {
         storedTrips.add(f)
         return true
     }
-    override suspend fun trips() = storedTrips.toList()
+    val drivers = mutableMapOf<Long, DriverStatus>()
+    override suspend fun trips() = ownerTrips(storedTrips.toList(), drivers)
+    override suspend fun setDriver(startMs: Long, status: DriverStatus, observation: ai.handleon.driveprint.DriverObservation?, nowMs: Long) { drivers[startMs] = status }
+    override suspend fun pendingTrips() = storedTrips.filter { drivers[it.startMs] == DriverStatus.PENDING }
+    override suspend fun driverStatuses() = drivers.toMap()
+    override suspend fun answerDriver(startMs: Long, isOwner: Boolean, nowMs: Long) { drivers[startMs] = if (isOwner) DriverStatus.OWNER else DriverStatus.OTHER }
     override suspend fun labels() = storedLabels.toMap()
     override suspend fun setLabel(day: LocalDate, kind: String?) {
         if (kind == null) storedLabels.remove(day) else storedLabels[day] = kind

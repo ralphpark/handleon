@@ -2,7 +2,8 @@ package ai.handleon.car.ui
 
 import kotlinx.serialization.json.*
 
-data class SharingRecipient(val familyName: String, val scope: String, val delayDays: Int, val sharePattern: Boolean) {
+data class SharingRecipient(val familyName: String, val scope: String, val delayDays: Int, val sharePattern: Boolean,
+                            val driveDone: String? = null, val weeklyChange: Boolean = false, val habits: Boolean = false) {
     val scopeText: String get() = when (scope) {
         "stage" -> "단계만"
         "trend" -> "추이 그래프까지"
@@ -15,6 +16,7 @@ data class SharingRecipient(val familyName: String, val scope: String, val delay
 }
 
 data class SharingUi(val paused: Boolean, val recipients: List<SharingRecipient>) {
+    val driveNoticeRecipients: Int get() = if (paused) 0 else recipients.count { it.driveDone in setOf("each", "evening") }
     val showHome: Boolean get() = paused || recipients.isNotEmpty()
     val status: String get() = if (paused) "가족 공유를 잠시 멈췄어요" else "가족 ${recipients.size}명과 공유 중"
     val action: String get() = if (paused) "다시 공유하기" else "잠시 멈추기"
@@ -26,7 +28,10 @@ data class SharingUi(val paused: Boolean, val recipients: List<SharingRecipient>
                     val r = item.jsonObject
                     SharingRecipient(r.getValue("family_name").jsonPrimitive.contentOrNull ?: "가족",
                         r.getValue("scope").jsonPrimitive.content, r.getValue("delay_days").jsonPrimitive.int,
-                        r.getValue("share_pattern").jsonPrimitive.boolean)
+                        r.getValue("share_pattern").jsonPrimitive.boolean,
+                        r["drive_done"]?.jsonPrimitive?.contentOrNull?.takeIf { it in setOf("each", "evening") },
+                        r["weekly_change"]?.jsonPrimitive?.booleanOrNull ?: false,
+                        r["habits"]?.jsonPrimitive?.booleanOrNull ?: false)
                 })
         }
     }

@@ -64,6 +64,19 @@ fun letterBody(row: JsonObject, report: LongReport): JsonObject = buildJsonObjec
 }
 
 class Uploader(private val client: SupabaseClient) {
+    suspend fun uploadWeeklyChanges(driverId: String, report: ai.handleon.driveprint.WeeklyReport, source: String) =
+        uploadWeeklyChanges(weeklyChangeRows(driverId, report, source))
+    suspend fun uploadWeeklyChanges(rows: JsonArray) {
+        if (rows.isNotEmpty()) client.upsert("weekly_changes", rows, "driver_id,week_start")
+    }
+    suspend fun uploadWeeklyHabits(driverId: String, weeks: List<Pair<ai.handleon.driveprint.HabitSummary, List<ai.handleon.driveprint.PromiseResult>>>, source: String) =
+        uploadWeeklyHabits(weeklyHabitRows(driverId, weeks, source))
+    suspend fun uploadWeeklyHabits(rows: JsonArray) {
+        if (rows.isNotEmpty()) client.upsert("weekly_habits", rows, "driver_id,week_start")
+    }
+    suspend fun reportOuting(outing: ai.handleon.driveprint.Outing) {
+        client.rpc("report_drive_end", DriveNotices.reportBody(outing))
+    }
     suspend fun uploadPatterns(driverId: String, months: List<PatternMonth>, source: String) {
         val rows = patternRows(driverId, months, source)
         if (rows.isNotEmpty()) client.upsert("monthly_patterns", rows, "driver_id,month")
@@ -85,4 +98,61 @@ class Uploader(private val client: SupabaseClient) {
             else client.invoke("monthly-letter", letterBody(row, report))["letter"]?.jsonPrimitive?.contentOrNull?.takeIf(String::isNotBlank)
     } catch (cancelled: CancellationException) { throw cancelled }
     catch (_: Exception) { null }
+}
+
+/** Engine excluded means excluded from baseline learning, so a flagged result is still publishable. */
+fun weeklyChangeRows(driverId: String, report: ai.handleon.driveprint.WeeklyReport, source: String): JsonArray {
+    require(source in setOf("car", "replay"))
+    val latest = report.weeks.maxOfOrNull { it.weekStart } ?: return JsonArray(emptyList())
+    val features = setOf("M1", "M2", "M3", "M4", "M5", "M6", "M7", "W2", "W3", "W4", "O1", "O2", "O7", "O8", "O9")
+    return buildJsonArray {
+        report.weeks.sortedBy { it.weekStart }.distinctBy { it.weekStart }.filter {
+            it.weekStart >= latest.minusWeeks(11) && (!it.excluded || it.flagged)
+        }.forEach { week ->
+            require(week.weekStart.dayOfWeek == java.time.DayOfWeek.MONDAY)
+            require(!week.flagged || week.over.isNotEmpty())
+            add(buildJsonObject {
+                put("driver_id", driverId); put("week_start", week.weekStart.toString()); put("flagged", week.flagged)
+                putJsonArray("domains") { week.over.sortedBy { it.ordinal }.forEach { add(it.name) } }
+                putJsonArray("top") {
+                    // The engine exposes contributions only for the latest completed week.
+                    if (week.weekStart == latest) report.top.filter { it.feature.name in features }.take(3).forEach { c ->
+                        add(buildJsonObject { put("feature", c.feature.name); put("direction", if (c.z < 0) "down" else "up") })
+                    }
+                }
+                put("source", source)
+            })
+        }
+    }
+}
+
+/** A server allowlist projection, deliberately independent of the on-screen weekday story. */
+fun uploadHabitStory(h: ai.handleon.driveprint.HabitSummary, promises: List<ai.handleon.driveprint.PromiseResult>): String = when {
+    h.trips <= 0 -> ""
+    promises.any { it.kept > 0 } && promises.all { it.kept >= 0 && it.broken == 0 } -> "운전 약속을 모두 지켰어요"
+    h.signalTotal > 0 && h.signalKept == h.signalTotal -> "방향지시등을 모두 켰어요"
+    else -> "이번 주 ${h.trips.coerceIn(0, 200)}번 운전했어요"
+}
+fun weeklyHabitRows(driverId: String, weeks: List<Pair<ai.handleon.driveprint.HabitSummary, List<ai.handleon.driveprint.PromiseResult>>>, source: String): JsonArray {
+    require(source in setOf("car", "replay"))
+    val latest = weeks.maxOfOrNull { it.first.from } ?: return JsonArray(emptyList())
+    return buildJsonArray {
+        weeks.sortedBy { it.first.from }.distinctBy { it.first.from }.filter { it.first.from >= latest.minusWeeks(7) }.forEach { (h, promises) ->
+            require(h.from.dayOfWeek == java.time.DayOfWeek.MONDAY)
+            val trips = h.trips.coerceIn(0, 200)
+            val signalTotal = h.signalTotal.coerceAtLeast(0)
+            val promiseTotal = promises.sumOf { it.kept.coerceAtLeast(0).toLong() + it.broken.coerceAtLeast(0) }.coerceIn(0, Int.MAX_VALUE.toLong())
+            val promiseKept = promises.sumOf { it.kept.coerceAtLeast(0).toLong() }.coerceIn(0, promiseTotal)
+            add(buildJsonObject {
+                put("driver_id", driverId); put("week_start", h.from.toString())
+                put("trips", trips); put("minutes", h.minutes.coerceIn(0, 10080))
+                put("signal_kept", h.signalKept.coerceIn(0, signalTotal)); put("signal_total", signalTotal)
+                put("hard_brakes", h.hardBrakes.coerceAtLeast(0)); put("hard_accels", h.hardAccels.coerceAtLeast(0))
+                put("calm_trips", h.calmTrips.coerceIn(0, trips)); put("long_stretches", h.longStretches.coerceAtLeast(0))
+                put("night_trips", h.nightTrips.coerceIn(0, trips))
+                put("promises_kept", promiseKept); put("promises_total", promiseTotal)
+                put("story", uploadHabitStory(h, promises)); put("source", source)
+            })
+        }
+    }
 }
