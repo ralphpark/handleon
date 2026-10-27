@@ -5,6 +5,8 @@ import java.time.LocalDate
 import java.time.YearMonth
 import java.time.ZoneId
 
+data class Readiness(val weeklyWeeksLeft: Int, val monthlyFrom: YearMonth?, val monthlyTripsLeft: Int)
+
 class Driveprint(private val zone: ZoneId = ZoneId.of("Asia/Seoul")) {
     fun longReport(
         trips: List<TripFeatures>, labeledDays: Set<LocalDate>,
@@ -84,6 +86,55 @@ class Driveprint(private val zone: ZoneId = ZoneId.of("Asia/Seoul")) {
             DayInput(day, Periods.values(selected, day, day.plusDays(1), zone), selected.size, day in labeledDays)
         }
         return ShortTrack.evaluate(inputs, resets, today)
+    }
+
+    fun weeklyReport(
+        trips: List<TripFeatures>, labeledDays: Set<LocalDate>, resets: Set<Reset>,
+        today: LocalDate, gate: ForecastGate? = null,
+    ): WeeklyReport {
+        val weeklyZone = ZoneId.of("Asia/Seoul")
+        fun day(t: TripFeatures) = Instant.ofEpochMilli(t.startMs).atZone(weeklyZone).toLocalDate()
+        fun monday(d: LocalDate) = d.minusDays(d.dayOfWeek.value - 1L)
+        val currentWeek = monday(today)
+        val selected = Familiar.mark(trips.filter {
+            (it.source == Source.CAR || it.source == Source.SIM) && day(it) < currentWeek
+        })
+        val grouped = selected.groupBy { monday(day(it)) }
+        val first = grouped.keys.minOrNull()
+        val weeks = if (first == null) emptyList() else generateSequence(first) { it.plusWeeks(1) }
+            .takeWhile { it < currentWeek }.map { from ->
+                val weekTrips = grouped[from].orEmpty()
+                WeekInput(from, Periods.values(weekTrips, from, from.plusWeeks(1), weeklyZone)
+                    .filterKeys { it in WeeklyTrack.FEATURES }, weekTrips.size,
+                    labeledDays.any { it >= from && it < from.plusWeeks(1) },
+                    (0L..4L).any { KoreanHolidays.isOffDay(from.plusDays(it)) })
+            }.toList()
+        val applicable = resets.filter { it.day <= today }.toSet()
+        val report = WeeklyTrack.evaluate(weeks, applicable, gate)
+        return if (applicable.any { it.day >= currentWeek }) report.copy(
+            status = WeeklyStatus.BUILDING, baselineFrom = null,
+            weeksUntilReady = WeeklyTrack.MIN_BASE, top = emptyList()) else report
+    }
+
+    /** Convenience for history without labels or resets. */
+    fun readiness(trips: List<TripFeatures>, weekly: WeeklyReport, today: LocalDate): Readiness =
+        readiness(trips, weekly, today, emptySet(), emptySet())
+
+    /** Pass the same labels and resets used for longReport so progress cannot revive excluded history. */
+    fun readiness(trips: List<TripFeatures>, weekly: WeeklyReport, today: LocalDate,
+                  labeledDays: Set<LocalDate>, resets: Set<Reset>): Readiness {
+        if (longReport(trips, labeledDays, resets, today).stage != Stage.BUILDING)
+            return Readiness(weekly.weeksUntilReady, null, 0)
+        // LongTrack applies ALL resets at month boundaries; CAR/HOME resets retain mobility history.
+        val resetMonth = resets.filter { it.kind == ResetKind.ALL && it.day <= today }
+            .maxOfOrNull { YearMonth.from(it.day) }
+        val vehicle = trips.filter {
+            val day = date(it)
+            (it.source == Source.CAR || it.source == Source.SIM) && day <= today && day !in labeledDays &&
+                (resetMonth == null || YearMonth.from(day) >= resetMonth)
+        }
+        val first = vehicle.minOfOrNull { YearMonth.from(date(it)) }
+        return Readiness(weekly.weeksUntilReady, first?.plusMonths(7), (50 - vehicle.size).coerceAtLeast(0))
     }
 
     private fun date(trip: TripFeatures): LocalDate = Instant.ofEpochMilli(trip.startMs).atZone(zone).toLocalDate()

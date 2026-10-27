@@ -40,6 +40,7 @@ object Features {
             steeringStd = steeringStd, steeringReversalsPerMin = reversals,
             lkaEvents = telltales.count { it.type == "LKA" },
             fcaEvents = telltales.count { it.type == "FCA" },
+            hardAccels = hardAccels(samples),
         )
     }
 
@@ -162,6 +163,14 @@ object Features {
             }
         }
         return if (knownMs < 60_000) null else speedingMs.toDouble() / knownMs
+    }
+
+    private fun hardAccels(samples: List<Sample>): Int = samples.zipWithNext().count { (a, b) ->
+        val previous = a.speedKmh
+        val current = b.speedKmh
+        val dt = b.tMs - a.tMs
+        previous != null && current != null && previous.isFinite() && current.isFinite() &&
+            dt in 1..2_000 && (current - previous) * 1_000 / dt + 1e-9 >= 12.9
     }
 
     private fun hardBrakes(samples: List<Sample>): Int {

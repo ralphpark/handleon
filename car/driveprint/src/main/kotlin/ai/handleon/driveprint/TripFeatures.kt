@@ -27,4 +27,5 @@ data class TripFeatures(
     val steeringReversalsPerMin: Double?,
     val lkaEvents: Int,
     val fcaEvents: Int,
+    val hardAccels: Int = 0,
 )

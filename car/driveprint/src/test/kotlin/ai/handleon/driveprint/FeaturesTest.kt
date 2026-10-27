@@ -9,6 +9,24 @@ import kotlinx.serialization.json.Json
 import kotlin.test.*
 
 class FeaturesTest {
+    @Test fun `hard accelerations count one-second gains of 12_9 kmh`() {
+        val f = ex(trip(listOf(10.0, 23.0, 24.0, 37.0, 38.0).map { s(it) }))
+        assertEquals(2, f.hardAccels)
+    }
+    @Test fun `old stored json without hardAccels still decodes`() {
+        val json = Json { encodeDefaults = true }.encodeToString(ex(trip(cruise(30.0, 60))))
+            .replace(",\"hardAccels\":0", "")
+        assertFalse("hardAccels" in json)
+        assertEquals(0, Json.decodeFromString<TripFeatures>(json).hardAccels)
+    }
+    @Test fun `hard accelerations ignore missing speeds gaps and nonfinite values`() {
+        val samples = listOf(s(10.0), s(22.9), s(23.0), s(35.8), s(Double.NaN), s(60.0))
+        assertEquals(1, ex(trip(samples)).hardAccels)
+        val gap = trip(listOf(s(10.0), s(50.0))).let { it.copy(samples = listOf(it.samples[0], it.samples[1].copy(tMs = t(10)))) }
+        assertEquals(0, ex(gap).hardAccels)
+        assertEquals(0, Features.fromPastTrip(base, base + 60_000, LatLon(37.0,127.0), LatLon(37.1,127.0), 10.0, null, emptySet(), KST).hardAccels)
+    }
+
     @Test fun noisyStraightStillGivesSteeringStd() {
         val random = java.util.Random(73)
         val samples = wobble(3.0).map { it.copy(headingDeg = random.nextGaussian() * 3) }

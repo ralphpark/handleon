@@ -20,6 +20,10 @@ object Personas {
     fun father(seed: Long = FATHER_SEED): List<TripFeatures> = Generator.trips(
         Persona(0, YearMonth.of(2025, 11), 60.0, 12, 30.0, seed), YearMonth.of(2024, 11), 24)
 
+    fun sudden(seed: Long = 5): List<TripFeatures> = Generator.trips(
+        Persona(5, null, 60.0, 12, 30.0, seed, suddenDrop = LocalDate.of(2026, 6, 1)),
+        YearMonth.of(2025, 11), 12)
+
     fun child(): List<TripFeatures> {
         val start = LocalDate.of(2026, 8, 24)
         val templates = Generator.trips(Persona(1, null, 60.0, 12, 30.0, 9L), YearMonth.of(2026, 8), 3)

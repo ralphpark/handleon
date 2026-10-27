@@ -51,18 +51,20 @@ object Generator {
                 val count = 1 + r.nextInt(2)
                 buildSet { while (size < count) add(r.nextInt(52)) }
             }
+            fun suddenFactor(day: Int): Double =
+                if (p.suddenDrop?.let { month.atDay(day) >= it } == true) 0.5 else 1.0
             fun make(day: Int, extraLong: Boolean): TripFeatures {
                 val night = random.nextDouble() < (if (winter) 0.25 else 0.15) * (1 - 0.5 * progress)
                 val rain = random.nextDouble() < if (month.monthValue in 7..8) 0.35 else 0.12
                 val distance = if (extraLong) 60 + random.nextDouble() * 120 else 2 + random.nextDouble() * 18
                 val startMs = month.atDay(day).atTime(if (night) 21 else 10 + random.nextInt(6), random.nextInt(60), random.nextInt(60))
                     .atZone(zone).toInstant().toEpochMilli()
-                val destination = zipf(random, places)
+                val destination = zipf(random, (places * suddenFactor(day)).roundToInt().coerceAtLeast(1))
                 val guided = random.nextDouble() < 0.05 + 0.20 * progress
                 val turns = 2 + random.nextInt(6)
                 val left = binomial(random, turns, 0.45 - 0.07 * progress)
                 val announced = if (guided) turns else 0
-                val radius = p.homeKmScale * (1 - 0.3 * progress) *
+                val radius = p.homeKmScale * (1 - 0.3 * progress) * suddenFactor(day) *
                     (if (extraLong) 2 + random.nextDouble() else 0.3 + 0.7 * random.nextDouble())
                 return TripFeatures(startMs, startMs + (distance / 35 * 3_600_000).roundToLong(), Source.SIM,
                     distance, night, rain, KoreanHolidays.isOffDay(month.atDay(day)),
@@ -78,7 +80,7 @@ object Generator {
             for (day in 1..month.lengthOfMonth()) {
                 val date = month.atDay(day)
                 val lambda = p.tripsPerMonth / month.lengthOfMonth() * (if (winter) 0.85 else 1.0) *
-                    (1 - 0.25 * progress) * (if ((date.dayOfYear - 1) / 7 in cold) 0.5 else 1.0)
+                    (1 - 0.25 * progress) * (if ((date.dayOfYear - 1) / 7 in cold) 0.5 else 1.0) * suddenFactor(day)
                 repeat(poisson(random, lambda)) { result.add(make(day, false)) }
             }
             val lunarMonths = when (month.year) {
@@ -87,7 +89,10 @@ object Generator {
                 2025 -> setOf(1, 10)
                 else -> emptySet()
             }
-            if (month.monthValue in lunarMonths) repeat(2) { result.add(make(1 + random.nextInt(month.lengthOfMonth()), true)) }
+            if (month.monthValue in lunarMonths) repeat(2) {
+                val day = 1 + random.nextInt(month.lengthOfMonth())
+                if (suddenFactor(day) == 1.0 || random.nextDouble() < suddenFactor(day)) result.add(make(day, true))
+            }
         }
         return result.sortedBy { it.startMs }
     }
