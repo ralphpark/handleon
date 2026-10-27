@@ -122,15 +122,8 @@ Deno.test("request validator rejects non-object bodies, each missing key and an 
   );
 });
 
-// BUG (letter.ts:47-48 and :53-54): mode, stage, direction and grade are checked with
-// `[...].includes(String(value))`, so JSON arrays such as ["up"] stringify to an allowed word and
-// pass, and parseLetterRequest returns an object that violates LetterRequest. buildPrompt then
-// compares `direction === "up"`, so a direction of ["up"] is described to the model as "줄어듦"
-// (decreased), and grade ["A"] is serialized as an array. month and feature already use strict
-// `typeof === "string"` checks; the enum fields should too.
 Deno.test({
   name: "request validator rejects non-string enum values that stringify to allowed words",
-  ignore: true,
   fn() {
     const item = REQ.top[0];
     rejects({ ...REQ, mode: ["maeum"] });

@@ -14,7 +14,8 @@ import androidx.compose.ui.unit.dp
 /** One horizontal card. The caller owns all state, lifecycle and side effects. */
 @Composable
 fun HomeCardPanel(card: HomeCard, busy: Boolean, onStartTimer: () -> Unit, onStopTimer: () -> Unit,
-                  onNoteSeen: (Long) -> Unit, onDismissLine: () -> Unit, onCenter: () -> Unit) {
+                  onNoteSeen: (Long) -> Unit, onDismissLine: () -> Unit, onCenter: () -> Unit,
+                  onDismissRest: () -> Unit = {}) {
     GlassPanel(Modifier.fillMaxWidth(), contentPadding = PaddingValues(horizontal = 24.dp, vertical = 10.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(24.dp)) {
             Column(Modifier.weight(1f)) {
@@ -34,7 +35,11 @@ fun HomeCardPanel(card: HomeCard, busy: Boolean, onStartTimer: () -> Unit, onSto
             }
             when (card) {
                 is HomeCard.Rest -> if (card.ui.remainingMs != null) PillButton("그만", onStopTimer, kind = PillKind.SECONDARY)
-                    else if (!card.ui.finished) PillButton("15분 타이머", onStartTimer)
+                    else {
+                        if (!card.ui.finished) PillButton("15분 타이머", onStartTimer)
+                        // 쉬지 않을 때도 한마디·오늘의 한 줄을 가리지 않게 이번 운전에서는 닫는다.
+                        PillButton("괜찮아요", onDismissRest, kind = PillKind.SECONDARY)
+                    }
                 is HomeCard.Note -> PillButton("확인했어요", { onNoteSeen(card.ui.id) }, enabled = !busy)
                 is HomeCard.Line -> {
                     if (card.ui.center) PillButton("가까운 곳 보기", onCenter, kind = PillKind.CORAL)

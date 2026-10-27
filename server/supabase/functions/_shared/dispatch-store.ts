@@ -65,6 +65,9 @@ export function createDispatchStore(
           .eq("id", q.id).eq("claim_token", claim).is("sent_at", null).is("cancelled_at", null),
       );
     },
+    async forget(q, token) {
+      data(await db.from("push_tokens").delete().eq("user_id", q.family_id).eq("token", token));
+    },
     async release(q) {
       data(
         await db.from("notification_queue").update({

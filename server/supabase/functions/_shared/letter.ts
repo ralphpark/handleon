@@ -39,19 +39,22 @@ const record = (v: unknown): v is Record<string, unknown> =>
   typeof v === "object" && v !== null && !Array.isArray(v);
 const onlyKeys = (v: Record<string, unknown>, keys: string[]) =>
   Object.keys(v).every((key) => keys.includes(key));
+// String(["up"]) 이 "up" 이 되지 않게 문자열인지 먼저 본다.
+const oneOf = (value: unknown, allowed: string[]) =>
+  typeof value === "string" && allowed.includes(value);
 
 export function parseLetterRequest(input: unknown): LetterRequest {
   if (
     !record(input) || !onlyKeys(input, ["month", "mode", "stage", "top"]) ||
     typeof input.month !== "string" || !/^\d{4}-(0[1-9]|1[0-2])-01$/.test(input.month) ||
-    !["maeum", "condition"].includes(String(input.mode)) ||
-    !["building", "stable", "watch", "talk"].includes(String(input.stage)) ||
+    !oneOf(input.mode, ["maeum", "condition"]) ||
+    !oneOf(input.stage, ["building", "stable", "watch", "talk"]) ||
     !Array.isArray(input.top) || input.top.length > 3 ||
     !input.top.every((item) =>
       record(item) && onlyKeys(item, ["feature", "direction", "grade"]) &&
       typeof item.feature === "string" && /^[MWO][1-9]\d?$/.test(item.feature) &&
-      ["up", "down"].includes(String(item.direction)) &&
-      ["A", "B", "C"].includes(String(item.grade))
+      oneOf(item.direction, ["up", "down"]) &&
+      oneOf(item.grade, ["A", "B", "C"])
     )
   ) throw new Error("invalid_request");
   return input as unknown as LetterRequest;

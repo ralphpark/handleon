@@ -9,7 +9,8 @@ String _duration(int minutes) => minutes < 60
     : minutes % 60 == 0
     ? '${minutes ~/ 60}시간'
     : '${minutes ~/ 60}시간 ${minutes % 60}분';
-String _percent(double ratio) => '${(ratio * 100).round()}%';
+// 0.565 * 100 이 56.4999… 가 되는 이진 소수 오차만 보정한다(두 번 반올림하면 0.9949 가 100% 가 된다).
+String _percent(double ratio) => '${(ratio * 100 + 1e-9).round()}%';
 String _usual(String? value) => value == null ? '' : ' · 평소 $value';
 
 class PatternCard extends StatelessWidget {

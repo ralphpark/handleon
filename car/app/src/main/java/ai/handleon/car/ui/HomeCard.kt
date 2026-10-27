@@ -28,8 +28,10 @@ fun topCard(rest: RestUi?, note: CarNote?, line: TodayLineUi?): HomeCard? = when
     else -> null
 }
 
-fun restEligible(session: DriveSessionView?, nowMs: Long, restAfterMs: Long): Boolean =
-    session != null && session.continuousMs >= restAfterMs && nowMs - session.lastMovingMs in 0 until 30 * 60_000L
+/** [dismissedStartMs]: "괜찮아요"를 누른 운전의 시작 시각. 그 운전에서는 다시 띄우지 않는다. */
+fun restEligible(session: DriveSessionView?, nowMs: Long, restAfterMs: Long, dismissedStartMs: Long? = null): Boolean =
+    session != null && session.startMs != dismissedStartMs &&
+        session.continuousMs >= restAfterMs && nowMs - session.lastMovingMs in 0 until 30 * 60_000L
 
 fun continuousDriveText(durationMs: Long): String {
     val minutes = durationMs.coerceAtLeast(0) / 60_000

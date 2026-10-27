@@ -78,6 +78,10 @@ function recordingStore(
         log.push("release");
         return Promise.resolve();
       },
+      forget: (_q: QueueItem, token: string) => {
+        log.push(`forget:${token}`);
+        return Promise.resolve();
+      },
     } satisfies DispatchStore as DispatchStore,
     sends: () => log.filter((entry) => entry.startsWith("send:")).map((entry) => entry.slice(5)),
   };
@@ -222,6 +226,28 @@ Deno.test("change during the last send blocks completion but keeps the sends alr
   assertFalse(await dispatchOne(queue, f.store, () => now));
   assertEquals(f.sends(), ["token-a", "token-b"]);
   assertEquals(f.log.slice(-2), ["state", "release"]);
+});
+
+Deno.test("an unregistered device token is forgotten and the other devices still get the notification", async () => {
+  const f = recordingStore(state(), ["token-a", "token-b", "token-c"]);
+  f.onSend = (token) => {
+    if (token === "token-b") throw new Error("fcm_token_unregistered");
+  };
+  assert(await dispatchOne(queue, f.store, () => now));
+  assertEquals(f.sends(), ["token-a", "token-b", "token-c"]);
+  assert(f.log.includes("forget:token-b"));
+  assert(f.log.includes("complete"));
+});
+
+Deno.test("when every device token is unregistered the queue stays unsent for a later device", async () => {
+  const f = recordingStore(state(), ["token-a", "token-b"]);
+  f.onSend = () => {
+    throw new Error("fcm_token_unregistered");
+  };
+  assertFalse(await dispatchOne(queue, f.store, () => now));
+  assertEquals(f.log.filter((e) => e.startsWith("forget:")), ["forget:token-a", "forget:token-b"]);
+  assertFalse(f.log.includes("complete"));
+  assertEquals(f.log.at(-1), "release");
 });
 
 // README "남은 한계": a partial failure leaves the queue unsent, so the next attempt resends to

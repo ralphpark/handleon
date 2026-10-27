@@ -93,6 +93,7 @@ fun Nav(graph: AppGraph, engine: EngineState, replay: ReplayViewModel, driving: 
     var nowMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
     var restEndMs by rememberSaveable { mutableStateOf<Long?>(null) }
     var restFinished by rememberSaveable { mutableStateOf(false) }
+    var restDismissedStart by rememberSaveable { mutableStateOf<Long?>(null) }
     val notifications = remember(graph) { RestNotifications(graph.context) }
     val session by CollectorService.driveSession.collectAsStateWithLifecycle()
     // 발표에서는 2분 주행으로 쉬어 가기를 시연할 수 있도록 줄인다. 평소에는 2시간이다.
@@ -116,7 +117,7 @@ fun Nav(graph: AppGraph, engine: EngineState, replay: ReplayViewModel, driving: 
     val lifecycleState by lifecycle.currentStateFlow.collectAsState()
     val today = Instant.ofEpochMilli(nowMs).atZone(KST).toLocalDate()
     val resumed = lifecycleState.isAtLeast(Lifecycle.State.RESUMED)
-    val restUi = if (!driving && (restEndMs != null || restFinished || restEligible(session, nowMs, restAfterMs)))
+    val restUi = if (!driving && (restEndMs != null || restFinished || restEligible(session, nowMs, restAfterMs, restDismissedStart)))
         RestUi(restEndMs?.let { (it - nowMs).coerceAtLeast(0) }, restFinished) else null
     val card = topCard(restUi, notes.firstOrNull(), visibleTodayLine(today, mode, todayTripDay == today, dismissedLine))
 
@@ -291,6 +292,7 @@ fun Nav(graph: AppGraph, engine: EngineState, replay: ReplayViewModel, driving: 
         card?.let { HomeCardPanel(it, familyBusy,
             onStartTimer = { if (parkedAndResumed()) { restEndMs = System.currentTimeMillis() + REST_TIMER_MS; restFinished = false; notifications.cancel() } },
             onStopTimer = { restEndMs = null; restFinished = false; notifications.cancel() },
+            onDismissRest = { restDismissedStart = session?.startMs; restEndMs = null; restFinished = false; notifications.cancel() },
             onNoteSeen = { id -> familyAction { graph.carSync.markNoteSeen(id); notes = notesAfterSeen(notes, id) } },
             onDismissLine = { graph.dismissTodayLine(today); dismissedLine = today.toString() }, onCenter = ::openCenter) }
     }

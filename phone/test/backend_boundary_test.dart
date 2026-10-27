@@ -87,9 +87,9 @@ void main() {
       row.usualNightRatio,
       row.usualLongRatio,
     ], everyElement(isNull));
+    // driver_name 은 비어 있으면 '가족'으로 보여 주므로 필수 키가 아니다.
     for (final key in [
       'driver_id',
-      'driver_name',
       'month',
       'partial',
       'trips',
@@ -161,50 +161,38 @@ void main() {
       '가족',
     );
   });
-  test(
-    'SharingState keeps every recipient when one family_name is null',
-    () {
-      final state = SharingState.fromJson({
-        'paused': false,
-        'recipients': [
-          {
-            'family_name': '큰딸',
-            'scope': 'detail',
-            'delay_days': 0,
-            'share_pattern': true,
-          },
-          {
-            'family_name': null,
-            'scope': 'stage',
-            'delay_days': 7,
-            'share_pattern': false,
-          },
-        ],
-      });
-      expect(state.recipients.map((r) => r.familyName), ['큰딸', '가족']);
-    },
-    skip:
-        'bug: backend.dart:179 SharingRecipient requires family_name, so one '
-        'null display_name fails the whole sharing state',
-  );
-  test(
-    'PatternRow, FamilyLink and SentNote fall back to 가족 for a null '
-    'driver_name',
-    () {
-      expect(pattern(changes: {'driver_name': null}).driverName, '가족');
-      expect(
-        FamilyLink.fromJson({...linkJson(), 'driver_name': null}).driverName,
-        '가족',
-      );
-      expect(
-        SentNote.fromJson({...noteJson(), 'driver_name': null}).driverName,
-        '가족',
-      );
-    },
-    skip:
-        'bug: backend.dart:222/254/295 require driver_name, so one null '
-        'driver display_name fails the family feed or the sent-note list',
-  );
+  test('SharingState keeps every recipient when one family_name is null', () {
+    final state = SharingState.fromJson({
+      'paused': false,
+      'recipients': [
+        {
+          'family_name': '큰딸',
+          'scope': 'detail',
+          'delay_days': 0,
+          'share_pattern': true,
+        },
+        {
+          'family_name': null,
+          'scope': 'stage',
+          'delay_days': 7,
+          'share_pattern': false,
+        },
+      ],
+    });
+    expect(state.recipients.map((r) => r.familyName), ['큰딸', '가족']);
+  });
+  test('PatternRow, FamilyLink and SentNote fall back to 가족 for a null '
+      'driver_name', () {
+    expect(pattern(changes: {'driver_name': null}).driverName, '가족');
+    expect(
+      FamilyLink.fromJson({...linkJson(), 'driver_name': null}).driverName,
+      '가족',
+    );
+    expect(
+      SentNote.fromJson({...noteJson(), 'driver_name': null}).driverName,
+      '가족',
+    );
+  });
   test('SentNote reads Z, +00:00, -00:00 and a space separator as one UTC '
       'instant', () {
     for (final raw in [

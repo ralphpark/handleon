@@ -53,6 +53,7 @@ function fakeStore(initial = state()) {
       released = true;
       return Promise.resolve();
     },
+    forget: () => Promise.resolve(),
   };
   return {
     store,

@@ -3,6 +3,10 @@ import 'package:flutter/material.dart';
 import '../backend.dart';
 import '../ui.dart';
 
+const confirmEmailNotice =
+    '확인 메일의 링크를 이 휴대폰에서 누르면 핸들온이 열리며 로그인돼요. '
+    '다른 기기에서 눌러 오류 화면이 보여도 확인은 끝난 것이니, 여기서 로그인해 주세요.';
+
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key, required this.backend});
   final Backend backend;
@@ -48,7 +52,7 @@ class _AuthScreenState extends State<AuthScreen> {
         );
         if (mounted && result == SignUpResult.confirmEmail) {
           setState(() {
-            message = '이메일로 보낸 확인 링크를 누른 뒤 로그인해 주세요';
+            message = confirmEmailNotice;
             signup = false;
             password.clear();
           });

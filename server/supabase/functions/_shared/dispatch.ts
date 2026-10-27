@@ -19,6 +19,8 @@ export interface DispatchStore {
   send(token: string): Promise<void>;
   complete(q: QueueItem): Promise<void>;
   release(q: QueueItem): Promise<void>;
+  /** 등록이 풀린 기기 토큰을 지운다. */
+  forget(q: QueueItem, token: string): Promise<void>;
 }
 export function canSend(state: DeliveryState, now: Date): boolean {
   const { queue, link, summary } = state;
@@ -40,12 +42,21 @@ export async function dispatchOne(
     if (!canSend(await store.state(q), now())) return false;
     const tokens = [...new Set(await store.tokens(q))];
     if (!tokens.length) return false;
+    let delivered = 0;
     for (const token of tokens) {
       // This read occurs AFTER token/OAuth preparation and immediately before each HTTP send.
       if (!canSend(await store.state(q), now())) return false;
-      await store.send(token);
+      try {
+        await store.send(token);
+        delivered++;
+      } catch (e) {
+        // 꺼진 기기의 토큰 하나 때문에 다른 기기에 같은 알림이 반복되지 않게, 지우고 다음 기기로 간다.
+        if (!(e instanceof Error) || e.message !== "fcm_token_unregistered") throw e;
+        await store.forget(q, token);
+      }
     }
-    if (!canSend(await store.state(q), now())) return false;
+    // 모든 토큰이 풀렸으면 보낸 것으로 적지 않는다(새 기기가 등록되면 그때 보낸다).
+    if (!delivered || !canSend(await store.state(q), now())) return false;
     await store.complete(q);
     return true;
   } finally {

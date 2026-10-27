@@ -44,7 +44,7 @@ void main() {
     );
     await tapText(t, '가족이에요');
     await tapText(t, '가입하기');
-    expect(find.text('이메일로 보낸 확인 링크를 누른 뒤 로그인해 주세요'), findsOneWidget);
+    expect(find.text(confirmEmailNotice), findsOneWidget);
   });
   for (final role in Role.values) {
     testWidgets('$role home and opposite route guard', (t) async {

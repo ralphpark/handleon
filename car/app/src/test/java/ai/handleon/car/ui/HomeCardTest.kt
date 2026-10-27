@@ -64,6 +64,15 @@ class HomeCardTest {
         assertEquals(notes, notesAfterSeen(notes, 99))
         assertIs<HomeCard.Line>(topCard(null, notesAfterSeen(remaining, 2).firstOrNull(), todayLine(day, Mode.MAEUM)))
     }
+    @Test fun dismissedRestStaysHiddenOnlyForThatDrive() {
+        val session = DriveSessionView(1_000, 1_000 + 2 * 3_600_000L)
+        val now = session.lastMovingMs + 60_000
+        // "괜찮아요"를 누른 운전(시작 시각)에는 다시 띄우지 않는다.
+        assertFalse(restEligible(session, now, 2 * 3_600_000L, dismissedStartMs = session.startMs))
+        // 다음 운전(다른 시작 시각)에는 다시 띄운다.
+        val next = DriveSessionView(9_000_000, 9_000_000 + 2 * 3_600_000L)
+        assertTrue(restEligible(next, next.lastMovingMs + 60_000, 2 * 3_600_000L, dismissedStartMs = session.startMs))
+    }
     @Test fun restEligibilityAndMinuteFloor() {
         val session = DriveSessionView(0, 2 * 3_600_000L)
         assertTrue(restEligible(session, session.lastMovingMs + 29 * 60_000, 2 * 3_600_000L))

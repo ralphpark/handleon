@@ -99,7 +99,8 @@ export async function sendMessage(
   );
   if (!response.ok) {
     await response.body?.cancel();
-    throw new Error("fcm_failed");
+    // 404 는 앱을 지웠거나 기기가 사라져 등록이 풀린 토큰(UNREGISTERED)이다. 발송 쪽이 그 토큰을 지운다.
+    throw new Error(response.status === 404 ? "fcm_token_unregistered" : "fcm_failed");
   }
   const body = await response.json();
   if (typeof body.name !== "string" || !body.name) throw new Error("fcm_invalid_response");

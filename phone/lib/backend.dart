@@ -13,6 +13,8 @@ enum Role { driver, family }
 
 enum SignUpResult { signedIn, confirmEmail }
 
+const authRedirect = 'handleon://login';
+
 abstract class Backend {
   Role? get role;
   String? get userId;
@@ -558,6 +560,8 @@ class SupabaseBackend implements Backend {
       email: email.trim(),
       password: password,
       data: {'role': role.name, 'display_name': displayName.trim()},
+      // 확인 메일 링크를 이 휴대폰에서 누르면 앱이 열리고 바로 로그인된다(서버 Redirect URLs 에 등록 필요).
+      emailRedirectTo: authRedirect,
     );
     if (result.session == null) return SignUpResult.confirmEmail;
     await _syncProfile();

@@ -220,8 +220,20 @@ Deno.test("OAuth and FCM requests carry an unaborted timeout signal and a fetch 
   assertEquals(fcm.name, "TimeoutError");
 });
 
+Deno.test("FCM 404 (UNREGISTERED device token) rejects with fcm_token_unregistered and cancels the body", async () => {
+  const { response, state } = cancellable(404);
+  const f = countingFetch(() => response);
+  await assertRejects(
+    () => sendMessage("test-project", "test-access", "device", f.fetch),
+    Error,
+    "fcm_token_unregistered",
+  );
+  assertEquals(f.calls(), 1);
+  assert(state.cancelled);
+});
+
 Deno.test("FCM HTTP failure rejects with fcm_failed after one attempt and cancels the unread body", async () => {
-  for (const status of [400, 401, 403, 404, 429, 500, 503]) {
+  for (const status of [400, 401, 403, 429, 500, 503]) {
     const { response, state } = cancellable(status);
     const f = countingFetch(() => response);
     await assertRejects(

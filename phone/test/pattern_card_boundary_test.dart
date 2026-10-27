@@ -91,29 +91,23 @@ void main() {
   }
   // 차는 비율을 소수 셋째 자리로 반올림해 보낸다(Patterns.roundedRatio). 0.155 는 16% 인데
   // 0.145 * 100 == 14.499999999999998 이라 14% 가 된다.
-  group(
-    'three-decimal ratios ending in 5',
-    () {
-      for (final (ratio, text) in [
-        (0.145, '15%'),
-        (0.285, '29%'),
-        (0.565, '57%'),
-        (0.575, '58%'),
-        (1.005, '101%'),
-      ]) {
-        testWidgets('ratio $ratio rounds half up to $text like 0.155 does', (
-          t,
-        ) async {
-          await showPattern(t, {'radius_ratio': ratio, 'places_ratio': ratio});
-          expect(find.text('다니는 범위 · 평소의 $text'), findsOneWidget);
-          expect(find.text('가는 곳 가짓수 · 평소의 $text'), findsOneWidget);
-        });
-      }
-    },
-    skip:
-        'bug: pattern_card.dart:12 (ratio * 100).round() rounds some x.xx5 '
-        'ratios down through binary float error',
-  );
+  group('three-decimal ratios ending in 5', () {
+    for (final (ratio, text) in [
+      (0.145, '15%'),
+      (0.285, '29%'),
+      (0.565, '57%'),
+      (0.575, '58%'),
+      (1.005, '101%'),
+    ]) {
+      testWidgets('ratio $ratio rounds half up to $text like 0.155 does', (
+        t,
+      ) async {
+        await showPattern(t, {'radius_ratio': ratio, 'places_ratio': ratio});
+        expect(find.text('다니는 범위 · 평소의 $text'), findsOneWidget);
+        expect(find.text('가는 곳 가짓수 · 평소의 $text'), findsOneWidget);
+      });
+    }
+  });
   testWidgets('zero ratios and zero usual values are shown, not hidden', (
     t,
   ) async {

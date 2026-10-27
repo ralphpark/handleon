@@ -33,6 +33,7 @@
   - `family_notes`: 가족 → 운전자 한마디(120자, 읽지 않은 것 가족당 3개까지, 90일 뒤 cron 으로 삭제).
 - `0009_revoke_all_ends_invites.sql`: 모두 끊기(`revoke_all_shares`)가 아직 쓰지 않은 초대 코드도 끝냅니다(다시
   나누려면 새로 초대).
+- `0010_expire_stale_notifications.sql`: 7일이 지나도 못 보낸 알림을 매일 취소하는 cron.
 - `supabase/functions/monthly-letter/index.ts`: 차량 인증 → 편지 생성 → 해당 운전자의 월 요약 저장.
 - `supabase/functions/dispatch-notifications/index.ts`: 서비스 롤 인증 → 큐 조회 → 현재 동의 재확인
   → FCM.
@@ -67,7 +68,7 @@ Deno 2.7.12 의 `check` 에는 `--cached-only` 옵션이 없습니다. 캐시만
 ## 새 프로젝트에 적용하는 순서
 
 1. 승인된 개발용 Supabase 프로젝트에서 익명 로그인 활성화, 이메일 로그인 설정 확인. `0001`부터
-   `0009`까지 순서대로 적용합니다. **아래 SQL 전제와 RLS를 실서버에서 먼저 확인합니다.**
+   `0010`까지 순서대로 적용합니다. **아래 SQL 전제와 RLS를 실서버에서 먼저 확인합니다.**
 2. 로컬 `server/.env.test`에 `.env.test.example`의 세 이름에 대응하는 값을 직접 설정합니다. 이
    파일은 저장소 루트 `.gitignore`에서 이미 제외됩니다. 파일·토큰 내용을 로그에 출력하지 않습니다.
 3. Vault `vault.decrypted_secrets`에 `service_role_key`, `project_url` 이름의 비밀값이 각각 하나씩
@@ -147,10 +148,10 @@ deno test -A --frozen --env-file=.env.test tests/smoke.test.ts tests/rls.test.ts
 - 철회가 마지막 DB 확인보다 먼저 완료되면 전송은 0회입니다. 마지막 확인과 외부 FCM 요청 사이의 동시
   철회, 이미 FCM에 인계된 메시지는 PostgreSQL 트랜잭션만으로 회수할 수 없습니다. 실제 동시성
   시험으로 경계를 확인해야 합니다.
-- FCM 수락 후 `sent_at` 기록 전에 프로세스가 죽거나 여러 토큰 중 일부만 실패하면 재시도에서 중복
-  알림이 생길 수 있습니다. 실패한 큐는 10분마다 다시 시도하며 횟수 상한이 없으므로, 거절되는 토큰이
-  남아 있으면 앞서 성공한 기기에 같은 알림이 반복될 수 있습니다. 정확히 한 번 발송을 보장하지 않습니다.
-  실패한 기기 토큰의 정리와 장기 실패 큐 운영은 후속 과제입니다.
+- FCM 수락 후 `sent_at` 기록 전에 프로세스가 죽거나, 일시적 오류(5xx 등)로 여러 토큰 중 일부만 실패하면
+  재시도에서 중복 알림이 생길 수 있습니다. 정확히 한 번 발송을 보장하지 않습니다. FCM 이 등록 해제(404
+  UNREGISTERED)라고 답한 토큰은 그 자리에서 지우고 다른 기기로 이어 보내므로, 꺼진 기기 때문에 같은
+  알림이 반복되지는 않습니다. 보낼 기기가 없거나 계속 실패해 7일이 지난 알림은 매일 cron 으로 취소합니다(`0010`).
 - 버킷 `on conflict do nothing`은 기존 버킷 설정을 변경하지 않습니다. 이미 `imports`가 있다면
   비공개·5 MB·JSON 제한을 직접 확인합니다. `imports` 파일은 연결된 차량이 가져갈 때 지웁니다. 서버에는
   남은 파일을 시간이 지나면 지우는 작업이 따로 없습니다.
