@@ -6,6 +6,8 @@ import ai.handleon.driveprint.*
 import java.time.LocalDate
 import java.time.Instant
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.*
 import okhttp3.mockwebserver.MockWebServer
@@ -14,6 +16,25 @@ import org.junit.Test
 import kotlin.test.*
 
 class CarSyncTest {
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    @Test fun `driver correction rechecks permission after waiting for the sync lock`() = runTest {
+        val controller = sync()
+        val entered = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val release = kotlinx.coroutines.CompletableDeferred<Unit>()
+        var allowed = true
+        val first = launch {
+            controller.answerDriver(1, false, canAnswer = { entered.complete(Unit); release.await(); false })
+        }
+        entered.await()
+        val second = launch { controller.answerDriver(2, false, canAnswer = { allowed }) }
+        runCurrent()
+        allowed = false
+        release.complete(Unit)
+        first.join(); second.join()
+        assertTrue(repo.driverStatuses().isEmpty())
+        assertEquals(0, onSaved)
+        assertEquals(0, server.requestCount)
+    }
     private val server = MockWebServer()
     private val repo = MemoryTrips()
     private val prefs = MemoryPreferences()

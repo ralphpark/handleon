@@ -5,8 +5,6 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZonedDateTime
 
-/** C8 supplies adaptation projections later; C3 only reserves their place in the résumé. */
-data class AdaptWeek(val weekStart: LocalDate, val line: String)
 data class ResumeUi(val week: HabitSummary, val month: HabitSummary, val promises: List<PromiseResult>,
                     val adapt: List<AdaptWeek> = emptyList(), val blueLink: String? = null)
 
@@ -41,7 +39,7 @@ fun resumeLines(ui: ResumeUi): List<String> = buildList {
         add("${promiseTitle(it.promise)} · 지킨 기록 ${it.kept} / ${it.kept + it.broken}번")
     }
     add("새 차 적응")
-    if (ui.adapt.isEmpty()) add("새 차 적응 기록은 준비 중이에요") else ui.adapt.forEach { add(it.line) }
+    addAll(adaptationLines(ui.adapt))
     add("이전 차와 비교")
     add(ui.blueLink ?: "이전 차와 비교할 기록은 준비 중이에요")
 }

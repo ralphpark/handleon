@@ -44,6 +44,7 @@ class AppGraph(val context: Context) {
     private val presentationState = MutableStateFlow(presentation())
     val presentationEnabled = presentationState.asStateFlow()
     @Volatile var erasingData = false
+    @Volatile var driving = true // Unknown while the activity's UX connection is absent.
 
     /** 첫 실행 화면(T8)에서 출생 연도로 고른 모드. 고르기 전에는 마음 운전. */
     fun mode(): Mode = prefs.getString("mode", null)?.let { runCatching { Mode.valueOf(it) }.getOrNull() } ?: Mode.MAEUM

@@ -28,6 +28,7 @@ sealed interface HomeCard {
 
 sealed interface PendingConfirm {
     data object MarkOtherDriver : PendingConfirm
+    data class MarkOtherTrip(val startMs: Long, val requestedAtMs: Long) : PendingConfirm
     data object PauseSharing : PendingConfirm
 }
 
@@ -65,7 +66,7 @@ suspend fun runConfirmed(action: PendingConfirm?, markOther: suspend () -> Unit,
     // A network failure after a local mutation must not leave a live confirmation targeting the next trip.
     consume()
     when (action) {
-        PendingConfirm.MarkOtherDriver -> markOther()
+        PendingConfirm.MarkOtherDriver, is PendingConfirm.MarkOtherTrip -> markOther()
         PendingConfirm.PauseSharing -> pauseSharing()
         null -> Unit
     }

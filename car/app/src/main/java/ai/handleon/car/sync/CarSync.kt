@@ -109,7 +109,8 @@ class CarSync(
     }
 
     /** Serialize answers with uploads, so a sync cannot report an owner snapshot after a correction. */
-    suspend fun answerDriver(startMs: Long, isOwner: Boolean) = mutex.withLock {
+    suspend fun answerDriver(startMs: Long, isOwner: Boolean, canAnswer: suspend () -> Boolean = { true }) = mutex.withLock {
+        if (!canAnswer()) return@withLock
         repo.answerDriver(startMs, isOwner, nowMs())
         engineRunner.run(mode())
         reportOutingsLocked()

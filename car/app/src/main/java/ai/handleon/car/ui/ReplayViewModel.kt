@@ -51,11 +51,13 @@ class ReplayViewModel : ViewModel() {
                         month != null && YearMonth.from(Instant.ofEpochMilli(trip.startMs).atZone(KST)) <= month
                     })
                     // Assets have no home metadata: do not invent a registered home.
-                    mutable.update { it.copy(maeum = MaeumUi.from(report, null, progress), frame = it.frame + 1, stages = it.stages + report.stage) }
+                    val adapt = replayAdaptation(trips, month?.atEndOfMonth(), (app as HandleOnApp).graph.presentation())
+                    mutable.update { it.copy(maeum = MaeumUi.from(report, null, progress), frame = it.frame + 1, stages = it.stages + report.stage, adapt = adapt) }
                     finalReport = report
                 } else controller.daily().flowOn(Dispatchers.Default).buffer(0).collect { report ->
                     running.first { it }
-                    mutable.update { it.copy(condition = ConditionUi.from(report), frame = it.frame + 1) }
+                    val adapt = replayAdaptation(trips, report.days.lastOrNull()?.day, (app as HandleOnApp).graph.presentation())
+                    mutable.update { it.copy(condition = ConditionUi.from(report), frame = it.frame + 1, adapt = adapt) }
                 }
                 mutable.update { it.copy(complete = true) }
                 finalReport?.let { report ->

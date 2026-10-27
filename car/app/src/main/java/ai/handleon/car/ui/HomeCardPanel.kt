@@ -17,7 +17,8 @@ fun HomeCardPanel(card: HomeCard, busy: Boolean, onStartTimer: () -> Unit, onSto
                   onNoteSeen: (Long) -> Unit, onDismissLine: () -> Unit, onCenter: () -> Unit,
                   onDismissRest: () -> Unit = {}, onDriverAnswer: (Long, Boolean) -> Unit = { _, _ -> },
                   onConfirm: () -> Unit = {}, onCancelConfirm: () -> Unit = {}, onResume: () -> Unit = {},
-                  onDismissTrip: () -> Unit = {}, onDismissWeek: () -> Unit = {}) {
+                  onDismissTrip: () -> Unit = {}, onDismissWeek: () -> Unit = {},
+                  onGuideHome: () -> Unit = {}, onDismissLostWay: () -> Unit = {}, lostWayMessage: String? = null) {
     GlassPanel(Modifier.fillMaxWidth(), contentPadding = PaddingValues(horizontal = 24.dp, vertical = 10.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(24.dp)) {
             Column(Modifier.weight(1f)) {
@@ -35,10 +36,10 @@ fun HomeCardPanel(card: HomeCard, busy: Boolean, onStartTimer: () -> Unit, onSto
                     is HomeCard.Rest -> card.ui.body
                     is HomeCard.DriverCheck -> "방금 운전하신 분이 등록된 운전자 본인인가요?"
                     is HomeCard.Confirm -> when (card.action) {
-                        PendingConfirm.MarkOtherDriver -> "이번엔 다른 분이 운전하셨나요?"
+                        PendingConfirm.MarkOtherDriver, is PendingConfirm.MarkOtherTrip -> "이번엔 다른 분이 운전하셨나요?"
                         PendingConfirm.PauseSharing -> "가족 공유를 잠시 멈출까요?"
                     }
-                    is HomeCard.LostWay -> "주차한 뒤 길안내를 준비해요"
+                    is HomeCard.LostWay -> lostWayMessage ?: "내비 화면에서 집으로 가는 길을 확인해요"
                     is HomeCard.Trip -> card.line
                     is HomeCard.Week -> card.story
                     is HomeCard.Note -> card.ui.body
@@ -71,7 +72,10 @@ fun HomeCardPanel(card: HomeCard, busy: Boolean, onStartTimer: () -> Unit, onSto
                     PillButton("내 운전 이력서", onResume)
                     PillButton("이번 주 그만 보기", onDismissWeek, kind = PillKind.SECONDARY)
                 }
-                is HomeCard.LostWay -> Unit // 생성과 길안내는 C8에서 연결한다.
+                is HomeCard.LostWay -> {
+                    PillButton("안내 받기", onGuideHome, enabled = !busy)
+                    PillButton("괜찮아요", onDismissLostWay, kind = PillKind.SECONDARY, enabled = !busy)
+                }
                 is HomeCard.Note -> PillButton("확인했어요", { onNoteSeen(card.ui.id) }, enabled = !busy)
                 is HomeCard.Line -> {
                     if (card.ui.center) PillButton("가까운 곳 보기", onCenter, kind = PillKind.CORAL)

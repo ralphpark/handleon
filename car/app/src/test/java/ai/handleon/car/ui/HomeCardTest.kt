@@ -9,6 +9,13 @@ import java.time.LocalDate
 import kotlin.test.*
 
 class HomeCardTest {
+    @Test fun `lost way card follows confirmation and outranks a family note`() {
+        assertEquals(HomeCard.LostWay(123), topCard(HomeInputs(lostWay = 123, note = note)))
+        assertEquals(HomeCard.Confirm(PendingConfirm.PauseSharing), topCard(HomeInputs(
+            confirm = PendingConfirm.PauseSharing, lostWay = 123, note = note)))
+        assertTrue(showDrivingScreen(true, false, Screen.Home))
+        assertTrue(showDrivingScreen(true, true, Screen.Resume))
+    }
     private val day = LocalDate.parse("2026-10-25")
     private val note = CarNote(1, "큰딸", "천천히 오세요", "2026-10-25T00:00:00Z")
     @Test fun datesCycleWithinMode() {

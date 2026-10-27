@@ -1,0 +1,84 @@
+{
+  "packageName": "ai.handleon.car",
+  "appDescription": "Review local driving habits and request driver confirmation for changes.",
+  "invokeWord": "핸들온",
+  "version": "0.1",
+  "actionCalls": [
+    {
+      "type": "function",
+      "function": {
+        "name": "GET_DRIVING_SUMMARY",
+        "description": "Return numeric driving habits for today or the current week.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "period": {
+              "type": "string",
+              "enum": [
+                "today",
+                "week"
+              ],
+              "description": "The period covered by the driving summary."
+            }
+          },
+          "required": [
+            "period"
+          ]
+        },
+        "component": "service"
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "GET_PROMISE_STATUS",
+        "description": "Return numeric counts for the selected weekly driving promises.",
+        "parameters": {
+          "type": "object",
+          "properties": {},
+          "required": []
+        },
+        "component": "service"
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "GET_CHANGE_STATUS",
+        "description": "Return comparison readiness and remaining weeks or months.",
+        "parameters": {
+          "type": "object",
+          "properties": {},
+          "required": []
+        },
+        "component": "service"
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "MARK_OTHER_DRIVER",
+        "description": "Ask the driver to confirm a driver correction on the parked screen.",
+        "parameters": {
+          "type": "object",
+          "properties": {},
+          "required": []
+        },
+        "component": "service"
+      }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "PAUSE_FAMILY_SHARING",
+        "description": "Ask the driver to confirm pausing family sharing on the parked screen.",
+        "parameters": {
+          "type": "object",
+          "properties": {},
+          "required": []
+        },
+        "component": "service"
+      }
+    }
+  ]
+}

@@ -49,6 +49,16 @@
             android:exported="false"
             android:foregroundServiceType="location" />
 
+        <receiver android:name=".gleo.GleoReceiver" android:exported="true">
+            <intent-filter>
+                <action android:name="GET_DRIVING_SUMMARY" />
+                <action android:name="GET_PROMISE_STATUS" />
+                <action android:name="GET_CHANGE_STATUS" />
+                <action android:name="MARK_OTHER_DRIVER" />
+                <action android:name="PAUSE_FAMILY_SHARING" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </receiver>
         <receiver android:name=".collect.BootReceiver" android:exported="false" android:enabled="false">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />

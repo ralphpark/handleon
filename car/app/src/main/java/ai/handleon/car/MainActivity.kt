@@ -6,6 +6,7 @@ import ai.handleon.car.engine.DailyWorker
 import ai.handleon.car.engine.Mode
 import ai.handleon.car.ui.Nav
 import ai.handleon.car.ui.ReplayViewModel
+import ai.handleon.car.ui.UxDrivingGate
 import ai.handleon.car.ui.theme.HandleOnTheme
 import android.Manifest
 import android.car.Car
@@ -29,7 +30,9 @@ import kotlinx.coroutines.launch
 class MainActivity : ComponentActivity() {
     private val graph get() = (application as HandleOnApp).graph
     private var collectionAllowed by mutableStateOf(false)
-    private var driving by mutableStateOf(false)
+    private val uxGate = UxDrivingGate()
+    private var driving by mutableStateOf(uxGate.driving)
+    private fun updateDriving(value: Boolean) { driving = value; graph.driving = value }
     private var car: Car? = null
     private var ux: CarUxRestrictionsManager? = null
     private var alwaysLocation by mutableStateOf(false)
@@ -110,20 +113,27 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun connectUxRestrictions() {
+        uxGate.disconnect(); updateDriving(uxGate.driving)
         try {
             car = Car.createCar(this, Handler(Looper.getMainLooper()), Car.CAR_WAIT_TIMEOUT_DO_NOT_WAIT) { connected, ready ->
-                if (!ready) { ux = null; driving = false; return@createCar }
+                if (!ready) { ux = null; uxGate.disconnect(); updateDriving(uxGate.driving); return@createCar }
+                val connection = uxGate.beginConnection()
+                updateDriving(uxGate.driving)
                 try {
                     val manager = connected.getCarManager(Car.CAR_UX_RESTRICTION_SERVICE) as CarUxRestrictionsManager
                     ux = manager
-                    manager.registerListener { restriction -> runOnUiThread { driving = restriction.isRequiresDistractionOptimization } }
-                    driving = manager.currentCarUxRestrictions.isRequiresDistractionOptimization
-                } catch (e: Exception) { driving = false; Log.w("HandleOnUi", "차량 화면 제한 서비스에 연결하지 못했어요", e) }
+                    manager.registerListener { restriction -> runOnUiThread {
+                        uxGate.report(connection, restriction.isRequiresDistractionOptimization); updateDriving(uxGate.driving)
+                    } }
+                    uxGate.report(connection, manager.currentCarUxRestrictions.isRequiresDistractionOptimization)
+                    updateDriving(uxGate.driving)
+                } catch (e: Exception) { uxGate.disconnect(); updateDriving(uxGate.driving); Log.w("HandleOnUi", "차량 화면 제한 서비스에 연결하지 못했어요", e) }
             }
-        } catch (e: Exception) { driving = false; Log.w("HandleOnUi", "차량 서비스에 연결하지 못했어요", e) }
+        } catch (e: Exception) { uxGate.disconnect(); updateDriving(uxGate.driving); Log.w("HandleOnUi", "차량 서비스에 연결하지 못했어요", e) }
     }
 
     override fun onDestroy() {
+        uxGate.disconnect(); updateDriving(uxGate.driving)
         runCatching { ux?.unregisterListener() }
         runCatching { car?.disconnect() }
         ux = null; car = null

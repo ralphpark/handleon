@@ -21,6 +21,7 @@ data class ReplayUi(
     val condition: ConditionUi = ConditionUi.from(null), val stages: List<Stage> = emptyList(),
     val start: YearMonth? = null, val frame: Int = 0, val total: Int = 24,
     val paused: Boolean = false, val complete: Boolean = false, val error: String? = null,
+    val adapt: List<ai.handleon.driveprint.AdaptWeek> = emptyList(),
 )
 
 @Composable

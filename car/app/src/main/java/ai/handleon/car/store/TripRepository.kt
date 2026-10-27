@@ -27,6 +27,9 @@ class TripRepository(
         ownerTrips(allTrips(), driverStatuses())
     }
     private suspend fun allTrips() = db.trips().all().map { Json.decodeFromString<TripFeatures>(it.json) }
+    suspend fun latestCarForCorrection(): DriverCorrectionTrip? = db.withTransaction {
+        latestCarForCorrection(db.trips().all(), driverStatuses())
+    }
     override suspend fun pendingTrips(): List<TripFeatures> = db.withTransaction {
         settleDrivers()
         val statuses = driverStatuses()

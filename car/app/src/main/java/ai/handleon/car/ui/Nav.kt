@@ -99,6 +99,8 @@ fun Nav(graph: AppGraph, engine: EngineState, replay: ReplayViewModel, driving: 
     var selectedPromises by remember { mutableStateOf(graph.promises()) }
     var dismissedWeek by remember { mutableStateOf(graph.dismissedWeek()) }
     var dismissedTrip by rememberSaveable { mutableStateOf<Long?>(null) }
+    var dismissedLostWay by rememberSaveable { mutableStateOf<Long?>(null) }
+    var lostWayMessage by remember { mutableStateOf<String?>(null) }
     var nextIsOther by remember { mutableStateOf(graph.nextIsOther()) }
     var stopNoticesDialog by rememberSaveable { mutableStateOf(false) }
     val pendingConfirm by graph.pendingConfirm.collectAsStateWithLifecycle()
@@ -137,14 +139,20 @@ fun Nav(graph: AppGraph, engine: EngineState, replay: ReplayViewModel, driving: 
     val carTrips = remember(ownerTrips, nowMs / 60_000) { carTripsThrough(ownerTrips, nowMs) }
     val lastToday = carTrips.lastOrNull { Instant.ofEpochMilli(it.startMs).atZone(KST).toLocalDate() == today }
     val recentCorrection = carTrips.lastOrNull { nowMs - it.startMs in 0 until DriverFlow.ANSWER_WINDOW_MS }
-    val resumeUi = remember(ownerTrips, selectedPromises, nowMs / 60_000) { buildResume(ownerTrips, selectedPromises, now) }
+    val resumeUi = remember(ownerTrips, selectedPromises, blueLink, presentation, replayUi.adapt, nowMs / 60_000) {
+        val resume = buildResume(ownerTrips, selectedPromises, now)
+        resume.copy(adapt = if (presentation) replayUi.adapt else emptyList(),
+            blueLink = blueLinkCompare(blueLink.filter { it.month < java.time.YearMonth.from(now) }, resume.month.minutes.takeIf { resume.month.trips > 0 }))
+    }
+    val latestCarTrip = carTrips.maxByOrNull { it.endMs }
+    val lostWay = lostWayCard(latestCarTrip, home, nowMs, dismissedLostWay)
     val weekStory = remember(carTrips, weekCardKey(now)) {
         val from = LocalDate.parse(weekCardKey(now))
         Habits.summary(carTrips, Outings.group(carTrips, nowMs), from, from.plusWeeks(1), KST).story
     }
     val check = pendingTrips.firstOrNull { nowMs - it.startMs in 0 until DriverFlow.ANSWER_WINDOW_MS }
         ?.let { HomeCard.DriverCheck(it.startMs, Habits.of(it).minutes) }
-    val card = topCard(HomeInputs(rest = restUi, driverCheck = check, confirm = pendingConfirm,
+    val card = topCard(HomeInputs(rest = restUi, driverCheck = check, confirm = pendingConfirm, lostWay = lostWay,
         note = notes.firstOrNull(), trip = lastToday?.takeIf { it.startMs != dismissedTrip }?.let { HomeCard.Trip(Habits.line(Habits.of(it))) },
         week = weekStory?.takeIf { weekCardVisible(now, dismissedWeek) },
         line = visibleTodayLine(today, mode, todayTripDay == today, dismissedLine)))
@@ -295,8 +303,8 @@ fun Nav(graph: AppGraph, engine: EngineState, replay: ReplayViewModel, driving: 
             }
         }
     }
-    LaunchedEffect(past) {
-        if (past) try { blueLink = withContext(Dispatchers.IO) { BlueLinkMock.load(graph.context) } }
+    LaunchedEffect(past, screen) {
+        if (past || screen == Screen.Resume) try { blueLink = withContext(Dispatchers.IO) { BlueLinkMock.load(graph.context) } }
         catch (cancelled: CancellationException) { throw cancelled }
         catch (_: Exception) { error = "모의 기록을 열지 못했어요." }
     }
@@ -317,9 +325,10 @@ fun Nav(graph: AppGraph, engine: EngineState, replay: ReplayViewModel, driving: 
         replay.setVisible(screen == Screen.Replay && !driving && lifecycleState.isAtLeast(Lifecycle.State.RESUMED))
         onDispose { replay.setVisible(false) }
     }
-    DisposableEffect(screen) {
+    DisposableEffect(screen, driving, lifecycleState) {
         onDispose { centerNavigator.close() }
     }
+    LaunchedEffect(lostWay) { lostWayMessage = null }
     BackHandler(drivingScreen || screen !in listOf(Screen.Home, Screen.FirstRun)) { if (!drivingScreen) back() }
 
     if (drivingScreen) {
@@ -340,15 +349,30 @@ fun Nav(graph: AppGraph, engine: EngineState, replay: ReplayViewModel, driving: 
             onResume = { if (parkedAndResumed()) route = Screen.Resume.key },
             onDismissTrip = { dismissedTrip = lastToday?.startMs },
             onDismissWeek = { graph.dismissWeek(weekCardKey(now)); dismissedWeek = weekCardKey(now) },
+            lostWayMessage = lostWayMessage,
+            onGuideHome = {
+                val destination = home
+                val trip = latestCarTrip
+                if (parkedAndResumed() && destination != null && lostWay != null) {
+                    centerNavigator.request(destination, canRequest = {
+                        parkedAndResumed() && Screen.from(route) == Screen.Home &&
+                            lostWayCard(trip, destination, System.currentTimeMillis(), dismissedLostWay) != null
+                    }) { lostWayMessage = it }
+                }
+            },
+            onDismissLostWay = { if (parkedAndResumed()) { dismissedLostWay = lostWay; lostWayMessage = null; centerNavigator.close() } },
             onCancelConfirm = { if (parkedAndResumed()) graph.pendingConfirm.value = null },
             onConfirm = {
                 if (parkedAndResumed()) action {
                     val confirmation = graph.pendingConfirm.value
-                    val targetStart = (ownerTrips + pendingTrips).filter { trip -> trip.source == Source.CAR }
-                        .maxOfOrNull { trip -> trip.startMs }
                     try {
                         runConfirmed(confirmation, {
-                            targetStart?.let { graph.carSync.answerDriver(it, false) }
+                            val request = confirmation as? PendingConfirm.MarkOtherTrip
+                            if (request != null) graph.carSync.answerDriver(request.startMs, false, canAnswer = {
+                                val latest = graph.tripRepository.latestCarForCorrection()
+                                ai.handleon.car.gleo.driverCorrectionAllowed(request, latest, System.currentTimeMillis(), parkedAndResumed())
+                                    .also { if (!it) error = "확인할 운전 기록이 바뀌었어요. 다시 요청해 주세요." }
+                            })
                         }, { graph.carSync.setSharingPaused(true); sharing = graph.carSync.sharingState() },
                             consume = { graph.pendingConfirm.value = null })
                     } finally { SyncWorker.enqueue(graph.context); refreshLocal() }
@@ -418,6 +442,7 @@ fun Nav(graph: AppGraph, engine: EngineState, replay: ReplayViewModel, driving: 
                         todayTripDay = null; dismissedLine = null; restEndMs = null; restFinished = false
                         ownerTrips = emptyList(); pendingTrips = emptyList(); selectedPromises = emptySet()
                         dismissedWeek = null; dismissedTrip = null; nextIsOther = false; stopNoticesDialog = false
+                        dismissedLostWay = null; lostWayMessage = null
                         deleteDialog = false; route = Screen.FirstRun.key
                         onDataCleared()
                     } }, onBack = ::back,
@@ -435,7 +460,11 @@ fun Nav(graph: AppGraph, engine: EngineState, replay: ReplayViewModel, driving: 
                 Screen.Replay -> ReplayScreen(replayUi, replay::pause, { replay.end(); route = Screen.Settings.key }, ::openCenter)
                 Screen.DevEngine -> {
                     val live by CollectorService.live.collectAsStateWithLifecycle()
-                    DevEngineScreen(DevEngineUi.from(live), ::back)
+                    DevEngineScreen(DevEngineUi.from(live), ::back, gleoPanel = {
+                        if (ai.handleon.car.gleo.gleoMockVisible(presentation, driving)) {
+                            ai.handleon.car.gleo.GleoMockPanel { if (parkedAndResumed()) route = Screen.Home.key }
+                        }
+                    })
                 }
                 Screen.Center -> CenterScreen(centerUi, { center ->
                     centerNavigator.request(center) { centerUi = centerUi.copy(routeMessage = it) }

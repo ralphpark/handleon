@@ -31,7 +31,7 @@ import androidx.compose.ui.unit.sp
 
 /** 신호 구독·계산·이동 상태를 갖지 않는 시연 화면. */
 @Composable
-fun DevEngineScreen(ui: DevEngineUi, onBack: () -> Unit) {
+fun DevEngineScreen(ui: DevEngineUi, onBack: () -> Unit, gleoPanel: (@Composable () -> Unit)? = null) {
     ScreenFrame(topBar = {
         GlassPanel(Modifier.fillMaxWidth().drawWithContent {
             drawContent()
@@ -61,6 +61,7 @@ fun DevEngineScreen(ui: DevEngineUi, onBack: () -> Unit) {
                 EnginePanel(ui, compact, Modifier.weight(1f).fillMaxHeight())
             }
         }
+        gleoPanel?.invoke()
     }
 }
 
