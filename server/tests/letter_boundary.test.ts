@@ -248,11 +248,13 @@ Deno.test("whitespace removal joins adjacent words so a forbidden word across a 
 Deno.test("text blocks are joined before the safety check: a split forbidden word falls back and split safe text is kept", async () => {
   const split = await generateLetter(REQ, {
     apiKey: "test-only",
+    judge: async () => true,
     fetch: () => Promise.resolve(reply([text("이번 달 치"), text("매 이야기")])),
   });
   assertEquals(split, FALLBACK);
   const safe = await generateLetter(REQ, {
     apiKey: "test-only",
+    judge: async () => true,
     fetch: () => Promise.resolve(reply([text("  이번 달도 "), text("함께해요.\n핸들온 드림\n")])),
   });
   assertEquals(safe, { letter: "이번 달도 함께해요.\n핸들온 드림", fallback: false });
@@ -268,24 +270,26 @@ Deno.test("response with no text blocks, only a thinking block or whitespace-onl
   ) {
     const result = await generateLetter(REQ, {
       apiKey: "test-only",
+      judge: async () => true,
       fetch: () => Promise.resolve(reply(content)),
     });
     assertEquals(result, FALLBACK, JSON.stringify(content));
   }
 });
 
-Deno.test("client errors are not retried and fall back after a single call", async () => {
+Deno.test("client errors fall back after one guard retry", async () => {
   for (const status of [400, 401, 403, 404]) {
     let calls = 0;
     const result = await generateLetter(REQ, {
       apiKey: "test-only",
+      judge: async () => true,
       fetch: () => {
         calls++;
         return Promise.resolve(apiError(status));
       },
     });
     assertEquals(result, FALLBACK);
-    assertEquals(calls, 1, String(status));
+    assertEquals(calls, 2, String(status));
   }
 });
 
@@ -294,6 +298,7 @@ Deno.test("timeout, conflict, rate limit and overload statuses are each retried 
     let calls = 0;
     const result = await generateLetter(REQ, {
       apiKey: "test-only",
+      judge: async () => true,
       fetch: () => {
         calls++;
         return Promise.resolve(apiError(status));
@@ -308,6 +313,7 @@ Deno.test("transient server error followed by a safe reply returns the model let
   let calls = 0;
   const result = await generateLetter(REQ, {
     apiKey: "test-only",
+    judge: async () => true,
     fetch: () =>
       Promise.resolve(
         ++calls === 1 ? apiError(500) : reply([text("편안한 한 달이었어요.\n핸들온 드림")]),
@@ -321,6 +327,7 @@ Deno.test("connection failure on the retry attempt falls back without a third ca
   let calls = 0;
   const result = await generateLetter(REQ, {
     apiKey: "test-only",
+    judge: async () => true,
     fetch: () =>
       ++calls === 1
         ? Promise.resolve(apiError(500))
@@ -340,12 +347,13 @@ Deno.test("malformed success bodies fall back without exposing their content", a
     let calls = 0;
     const result = await generateLetter(REQ, {
       apiKey: "test-only",
+      judge: async () => true,
       fetch: () => {
         calls++;
         return Promise.resolve(body());
       },
     });
     assertEquals(result, FALLBACK);
-    assertEquals(calls, 1);
+    assertEquals(calls, 2);
   }
 });

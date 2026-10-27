@@ -1,5 +1,5 @@
 import type { NotificationNote } from "./fcm.ts";
-import { isSafe } from "./letter.ts";
+import { ruleSafe } from "./guard.ts";
 
 export type NotificationKind = "stage" | "drive_done" | "drive_evening" | "weekly_change";
 export interface QueueItem {
@@ -65,12 +65,7 @@ export function notificationNote(state: DeliveryState): NotificationNote {
   const kind = state.queue?.kind ?? "stage";
   const candidate = state.profile?.display_name?.trim();
   // Display names are user input too; do not let them introduce forbidden push copy.
-  const name = candidate && isSafe(candidate) &&
-      !/등급|순위|알츠하이머|인지장애|반납|고령운전자/.test(
-        candidate.normalize("NFKC").replace(/[\s\p{Cf}]/gu, ""),
-      )
-    ? candidate
-    : "가족";
+  const name = candidate && ruleSafe(candidate) ? candidate : "가족";
   const bodies = {
     stage: "새 운전 요약이 도착했어요",
     drive_done: `${name}님이 운전을 마치셨어요`,

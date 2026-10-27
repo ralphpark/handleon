@@ -1,4 +1,6 @@
-import Anthropic from "npm:@anthropic-ai/sdk@1";
+import { opusText } from "./ai-runtime.ts";
+import { FORBIDDEN, guarded, haikuJudge, type Judge } from "./guard.ts";
+export { FORBIDDEN, isSafe } from "./guard.ts";
 
 export interface LetterRequest {
   month: string;
@@ -6,17 +8,6 @@ export interface LetterRequest {
   stage: "building" | "stable" | "watch" | "talk";
   top: { feature: string; direction: "up" | "down"; grade: "A" | "B" | "C" }[];
 }
-export const FORBIDDEN: string[] = [
-  "치매",
-  "인지장애",
-  "진단",
-  "위험",
-  "점수",
-  "질환",
-  "판정",
-  "우울",
-];
-
 // 차량 엔진 FeatureId 의 뜻과 같아야 한다 (car/driveprint FeatureId.kt, Copy.line).
 const FEATURE_NAMES: Record<string, string> = {
   M1: "차로 외출하시는 횟수",
@@ -82,11 +73,6 @@ export function buildPrompt(req: LetterRequest): { system: string; user: string 
   return { system, user };
 }
 
-export function isSafe(text: string): boolean {
-  const normalized = text.normalize("NFKC").replace(/[\s\p{Cf}]/gu, "");
-  return normalized.length > 0 && !FORBIDDEN.some((word) => normalized.includes(word));
-}
-
 export function fallbackLetter(req: LetterRequest): string {
   const closing = req.stage === "talk"
     ? "가족과 편안히 이야기 나누고 가까운 기관의 무료 선별검사도 알아보시면 좋겠어요."
@@ -96,47 +82,15 @@ export function fallbackLetter(req: LetterRequest): string {
 
 export async function generateLetter(
   req: LetterRequest,
-  opts: { apiKey: string; fetch?: typeof fetch },
+  opts: { apiKey: string; fetch?: typeof fetch; judge?: Judge; generate?: () => Promise<string> },
 ): Promise<{ letter: string; fallback: boolean }> {
-  const fallback = { letter: fallbackLetter(req), fallback: true };
   const controller = new AbortController();
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  try {
-    const client = new Anthropic({
-      apiKey: opts.apiKey,
-      fetch: opts.fetch,
-      timeout: 20_000,
-      maxRetries: 1,
-    });
-    const { system, user } = buildPrompt(req);
-    // SDK timeout is per attempt. This deadline bounds retries and response-body reading together.
-    const deadline = new Promise<never>((_, reject) => {
-      timer = setTimeout(() => {
-        controller.abort();
-        reject(new Error("letter_timeout"));
-      }, 20_000);
-    });
-    const response = await Promise.race([
-      client.beta.messages.create({
-        model: "claude-opus-5-5",
-        max_tokens: 16000,
-        output_config: { effort: "low" },
-        betas: ["server-side-fallback-2026-07-01"],
-        fallbacks: "default",
-        system,
-        messages: [{ role: "user", content: user }],
-      }, { signal: controller.signal }),
-      deadline,
-    ]);
-    const letter = response.content.filter((block) => block.type === "text").map((block) =>
-      block.text
-    ).join("").trim();
-    if (response.stop_reason === "refusal" || !isSafe(letter)) return fallback;
-    return { letter, fallback: false };
-  } catch {
-    // API errors and timeouts must not expose response content, credentials, or SDK errors.
-    return fallback;
-  } finally {
-    clearTimeout(timer);
-  }
+  const result = await guarded(
+    opts.generate ?? (() => opusText(buildPrompt(req), { ...opts, signal: controller.signal })),
+    (value) => [value],
+    fallbackLetter(req),
+    opts.judge ?? haikuJudge(opts.apiKey, { fetch: opts.fetch, signal: controller.signal }),
+    { onTimeout: () => controller.abort() },
+  );
+  return { letter: result.value, fallback: result.source === "fallback" };
 }

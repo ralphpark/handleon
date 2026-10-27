@@ -38,7 +38,10 @@
   종류별 알림 큐. `drive_done`은 마지막 종료 30분 뒤, `drive_evening`은 KST 20시에 보냅니다.
 - `0012_weekly_changes_habits.sql`: 주간 변화·습관 집계, 가족용 최근 12주 조회와 `weekly_change` 알림.
 - `0013_weekly_quiet_weeks_stop_drive.sql`: 평소와 같은 주는 영역 없이 올릴 수 있음(표시된 주는 영역 1개 이상), 차가 모든 가족의 운전 마침 소식을 한 번에 끄는 `stop_drive_notices()`.
-  두 마이그레이션은 파일만 작성했으며 원격 적용·통합 검증은 아직 하지 않았습니다.
+- `0014_coach.sql`: 가족에게 현재 보이는 값만 모으는 코치 문맥, KST 하루 5회 제한과 같은 문맥 캐시.
+  `coach_context_for`·`begin_coach_request`·`finish_coach_request`는 서비스 롤 전용이며 새 표는 RLS를 켭니다.
+- `supabase/functions/conversation-coach/index.ts`: 가족 JWT → 공유 문맥 → 말문 3개·피할 말 2개·이야깃거리.
+- `supabase/functions/clinic-summary/index.ts`: 운전자 본인 JWT → 최근 6개월/8주/12주 집계 → 600자 요약과 질문 3개.
 - `supabase/functions/monthly-letter/index.ts`: 차량 인증 → 편지 생성 → 해당 운전자의 월 요약 저장.
 - `supabase/functions/dispatch-notifications/index.ts`: 서비스 롤 인증 → 큐 조회 → 현재 동의 재확인
   → FCM.
@@ -72,6 +75,19 @@ Deno 2.7.12 의 `check` 에는 `--cached-only` 옵션이 없습니다. 캐시만
 
 S1·S2 최종 캐시 전용 전체 시험: **95개 통과, 0개 실패, 통합 66개 건너뜀**. 새 시험 이름과 결정·권한은
 [S1·S2 구현 보고](S1_S2_REPORT.md)에 있습니다. 원격 통합 시험의 통과를 뜻하지 않습니다.
+
+S3·S4 구현·시험 목록은 [S3·S4 구현 보고](S3_S4_REPORT.md)에 있습니다. `guard.ts`의 규칙 검사와
+`claude-haiku-5-5` 판정을 월간 편지·코치·진료 요약에 공통 적용합니다. 생성 모델은 `claude-opus-5-5`이며,
+한 번 재생성 후에도 실패하거나 전체 20초가 지나면 고정 문구를 반환합니다. 새 함수는 실패 시 500을 반환하지
+않고, 모델·DB 실패는 200 + `source: "fallback"`, 한도 초과는 429, 공유 없음은 404입니다.
+문맥·로그에 위치·장소명·운전자 이름·생성 원문을 넣지 않습니다. 알림은 SDK 의존성이 없는 `ruleSafe`만 씁니다.
+
+클로드 배포: **0014 적용 → conversation-coach·clinic-summary·monthly-letter 재배포**.
+`dispatch-notifications`도 공통 규칙 변경 반영을 위해 재배포합니다. 두 새 함수는 **verify_jwt=true**로
+배포하고 내부 `auth.getUser(jwt)` 검사도 유지합니다. 필요한 Edge 비밀 이름은 `ANTHROPIC_API_KEY`,
+`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`입니다. Haiku용 별도 키는 없습니다.
+`coach_live.test.ts`·`clinic_live.test.ts`의 통합·실모델 시험은 클로드가 개발 프로젝트에서 별도로 실행합니다.
+이번 작업에서는 원격 적용·배포·통합 실행을 하지 않았습니다.
 
 ## S1·S2 데이터 계약과 RPC
 

@@ -29,7 +29,16 @@ function reply(text: string, stop_reason = "end_turn") {
 }
 
 Deno.test("forbidden words are caught", () => {
-  assertEquals(FORBIDDEN, ["치매", "인지장애", "진단", "위험", "점수", "질환", "판정", "우울"]);
+  assertEquals(FORBIDDEN.slice(0, 8), [
+    "치매",
+    "인지장애",
+    "진단",
+    "위험",
+    "점수",
+    "질환",
+    "판정",
+    "우울",
+  ]);
   for (const word of FORBIDDEN) assertFalse(isSafe(`이번 달 ${word} 안내`));
   assertFalse(isSafe("치매가 의심됩니다"));
   assertFalse(isSafe("진\u200b단"));
@@ -59,8 +68,14 @@ Deno.test("prompt carries no location keys even with extra runtime fields", () =
 });
 Deno.test("feature names follow the car engine's meaning", () => {
   const { user } = buildPrompt({
-    month: "2026-10-01", mode: "maeum", stage: "talk",
-    top: [{ feature: "M7", direction: "down", grade: "A" }, { feature: "O1", direction: "up", grade: "A" }],
+    month: "2026-10-01",
+    mode: "maeum",
+    stage: "talk",
+    top: [{ feature: "M7", direction: "down", grade: "A" }, {
+      feature: "O1",
+      direction: "up",
+      grade: "A",
+    }],
   });
   assertEquals(JSON.parse(user).changes.map((c: { activity: string }) => c.activity), [
     "집에서 다녀오시는 거리",
@@ -83,6 +98,7 @@ Deno.test("request validator rejects location injection and invalid contracts", 
 Deno.test("model returns forbidden text: falls back through official SDK", async () => {
   const result = await generateLetter(TALK_REQ, {
     apiKey: "test-only",
+    judge: async () => true,
     fetch: () => Promise.resolve(reply("진단 결과입니다")),
   });
   assertEquals(result, { letter: fallbackLetter(TALK_REQ), fallback: true });
@@ -90,6 +106,7 @@ Deno.test("model returns forbidden text: falls back through official SDK", async
 Deno.test("refusal falls back even with safe text", async () => {
   const result = await generateLetter(TALK_REQ, {
     apiKey: "test-only",
+    judge: async () => true,
     fetch: () => Promise.resolve(reply("편안한 하루 보내세요", "refusal")),
   });
   assert(result.fallback);
@@ -98,6 +115,7 @@ Deno.test("500 response falls back after bounded retry", async () => {
   let calls = 0;
   const result = await generateLetter(TALK_REQ, {
     apiKey: "test-only",
+    judge: async () => true,
     fetch: () => {
       calls++;
       return Promise.resolve(
@@ -115,6 +133,7 @@ Deno.test("safe model output uses requested beta parameters and only text blocks
   let request: Record<string, unknown> = {};
   const result = await generateLetter(TALK_REQ, {
     apiKey: "test-only",
+    judge: async () => true,
     fetch: async (input, init) => {
       request = await new Request(input, init).json();
       const response = await reply("이번 달도 함께 살펴보아요.\n핸들온 드림").json();
@@ -134,6 +153,7 @@ Deno.test("empty response falls back", async () => {
   assert(
     (await generateLetter(TALK_REQ, {
       apiKey: "test-only",
+      judge: async () => true,
       fetch: () => Promise.resolve(reply("")),
     })).fallback,
   );
@@ -143,9 +163,13 @@ Deno.test("20 second total deadline aborts a stalled model call", async () => {
   const started = performance.now();
   const result = await generateLetter(TALK_REQ, {
     apiKey: "test-only",
+    judge: async () => true,
     fetch: (input, init) =>
       new Promise((_resolve, reject) => {
-        new Request(input, init).signal.addEventListener("abort", () => {
+        // Observe the SDK's signal directly. A throwaway Request creates a dependent
+        // signal which can be collected during the 20-second wait in Deno.
+        const signal = (init as RequestInit)?.signal ?? new Request(input, init).signal;
+        signal.addEventListener("abort", () => {
           aborted = true;
           reject(new DOMException("aborted", "AbortError"));
         }, { once: true });
