@@ -2,6 +2,15 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:phone/share_options.dart';
 
 void main() {
+  test('drive done choices have no implicit default', () {
+    expect(const ShareOptions().driveDone, isNull);
+    expect(const ShareOptions().weeklyChange, false);
+    expect(const ShareOptions().habits, false);
+    expect(DriveDoneMode.values.map((v) => v.label), [
+      '운전 끝날 때마다',
+      '하루 한 번 저녁에 모아서',
+    ]);
+  });
   test('범위는 정해진 문구와 서버 값으로 매핑한다', () {
     expect(ShareScope.values.map((value) => value.label), [
       '단계만',

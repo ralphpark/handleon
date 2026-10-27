@@ -44,12 +44,16 @@ abstract class Backend {
     bool sharePattern,
   );
   Future<SharingState> sharingState();
+  Future<void> setShareOptions(String familyId, ShareOptions options);
   Future<void> setSharingPaused(bool paused);
   Future<FamilyView> previewFamilyView(String familyId);
   Future<void> revokeShare(String familyId);
   Future<InvitePreview> previewInvite(String code);
   Future<void> acceptInvite(String code);
   Future<List<FeedRow>> familyFeed();
+  Future<List<DriveEvent>> familyDriveEvents();
+  Future<List<WeeklyChange>> familyWeekly();
+  Future<List<WeeklyHabit>> familyHabits();
   Future<List<PatternRow>> familyPatterns();
   Future<List<FamilyLink>> familyLinks();
   Future<int> sendNote(String driverId, String body);
@@ -172,16 +176,19 @@ class SharingRecipient {
     required this.scope,
     required this.timing,
     required this.sharePattern,
+    this.options = const ShareOptions(),
   });
   final String familyName;
   final ShareScope scope;
   final ShareTiming timing;
   final bool sharePattern;
+  final ShareOptions options;
   factory SharingRecipient.fromJson(Map<String, dynamic> j) => SharingRecipient(
     familyName: _string(j['family_name'] ?? '가족'),
     scope: _scope(j['scope']),
     timing: _timing(j['delay_days']),
     sharePattern: _boolean(j['share_pattern']),
+    options: ShareOptions.fromJson(j),
   );
 }
 
@@ -267,15 +274,163 @@ class FamilyView {
     required this.paused,
     required this.feed,
     required this.patterns,
+    this.options = const ShareOptions(),
+    this.driveEvents = const [],
+    this.weekly = const [],
+    this.habits = const [],
   });
   final bool paused;
   final List<FeedRow> feed;
   final List<PatternRow> patterns;
+  final ShareOptions options;
+  final List<DriveEvent> driveEvents;
+  final List<WeeklyChange> weekly;
+  final List<WeeklyHabit> habits;
   factory FamilyView.fromJson(Map<String, dynamic> j) => FamilyView(
     paused: _boolean(j['paused']),
     feed: _rows(j['feed']).map(FeedRow.fromJson).toList(),
     patterns: _rows(j['patterns']).map(PatternRow.fromJson).toList(),
+    options: j.containsKey('options')
+        ? ShareOptions.fromJson(_object(j['options']))
+        : const ShareOptions(),
+    driveEvents: _rows(j.containsKey('drive_events') ? j['drive_events'] : [])
+        .map(DriveEvent.fromJson)
+        .toList(),
+    weekly: _rows(j.containsKey('weekly') ? j['weekly'] : [])
+        .map(WeeklyChange.fromJson)
+        .toList(),
+    habits: _rows(j.containsKey('habits') ? j['habits'] : [])
+        .map(WeeklyHabit.fromJson)
+        .toList(),
   );
+}
+
+int _count(Object? value, {int minimum = 0, int? maximum}) {
+  final count = _integer(value);
+  if (count < minimum || (maximum != null && count > maximum)) {
+    throw const FormatException();
+  }
+  return count;
+}
+
+DateTime _weekStart(Object? value) {
+  final raw = _string(value);
+  if (!RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(raw)) {
+    throw const FormatException();
+  }
+  final date = _timestamp('${raw}T00:00:00Z');
+  if (date.weekday != DateTime.monday) throw const FormatException();
+  return DateTime(date.year, date.month, date.day);
+}
+
+class DriveEvent {
+  const DriveEvent({
+    required this.driverId,
+    required this.driverName,
+    required this.outingKey,
+    required this.endedAt,
+    required this.minutes,
+    required this.rested,
+  });
+  final String driverId, driverName, outingKey;
+  final DateTime endedAt;
+  final int minutes;
+  final bool rested;
+
+  factory DriveEvent.fromJson(Map<String, dynamic> j) => DriveEvent(
+    driverId: _string(j['driver_id']),
+    driverName: _string(j['driver_name'] ?? '가족'),
+    outingKey: _string(j['outing_key']),
+    endedAt: _timestamp(j['ended_at']).toLocal(),
+    minutes: _count(j['minutes'], minimum: 1, maximum: 1440),
+    rested: _boolean(j['rested']),
+  );
+}
+
+class WeeklyChange {
+  const WeeklyChange({
+    required this.driverId,
+    required this.driverName,
+    required this.weekStart,
+    required this.flagged,
+    required this.domains,
+  });
+  final String driverId, driverName;
+  final DateTime weekStart;
+  final bool flagged;
+  final List<String> domains;
+
+  factory WeeklyChange.fromJson(Map<String, dynamic> j) {
+    final domains = j['domains'];
+    if (domains is! List) throw const FormatException();
+    return WeeklyChange(
+      driverId: _string(j['driver_id']),
+      driverName: _string(j['driver_name'] ?? '가족'),
+      weekStart: _weekStart(j['week_start']),
+      flagged: _boolean(j['flagged']),
+      domains: domains
+          .whereType<String>()
+          .where(const {'MOBILITY', 'WAYFINDING', 'OPERATION'}.contains)
+          .toList(),
+    );
+  }
+}
+
+class WeeklyHabit {
+  const WeeklyHabit({
+    required this.driverId,
+    required this.driverName,
+    required this.weekStart,
+    required this.trips,
+    required this.minutes,
+    required this.signalKept,
+    required this.signalTotal,
+    required this.hardBrakes,
+    required this.hardAccels,
+    required this.calmTrips,
+    required this.longStretches,
+    required this.nightTrips,
+    required this.promisesKept,
+    required this.promisesTotal,
+    this.story,
+  });
+  final String driverId, driverName;
+  final DateTime weekStart;
+  final int trips,
+      minutes,
+      signalKept,
+      signalTotal,
+      hardBrakes,
+      hardAccels,
+      calmTrips,
+      longStretches,
+      nightTrips,
+      promisesKept,
+      promisesTotal;
+  final String? story;
+
+  factory WeeklyHabit.fromJson(Map<String, dynamic> j) {
+    final trips = _count(j['trips'], maximum: 200);
+    final signalTotal = _count(j['signal_total']);
+    final promisesTotal = _count(j['promises_total']);
+    return WeeklyHabit(
+      driverId: _string(j['driver_id']),
+      driverName: _string(j['driver_name'] ?? '가족'),
+      weekStart: _weekStart(j['week_start']),
+      trips: trips,
+      minutes: _count(j['minutes'], maximum: 10080),
+      signalKept: _integer(j['signal_kept']).clamp(0, signalTotal),
+      signalTotal: signalTotal,
+      hardBrakes: _count(j['hard_brakes']),
+      hardAccels: _count(j['hard_accels']),
+      calmTrips: _count(j['calm_trips']).clamp(0, trips),
+      longStretches: _count(j['long_stretches']),
+      nightTrips: _count(j['night_trips']).clamp(0, trips),
+      promisesKept: _integer(j['promises_kept']).clamp(0, promisesTotal),
+      promisesTotal: promisesTotal,
+      story: j['story'] == null ? null : _string(j['story']),
+    );
+  }
 }
 
 class SentNote {
@@ -650,6 +805,37 @@ class SupabaseBackend implements Backend {
   @override
   Future<SharingState> sharingState() async =>
       SharingState.fromJson(_object(await client.rpc('get_sharing_state')));
+
+  @override
+  Future<void> setShareOptions(String familyId, ShareOptions options) async {
+    await client.rpc(
+      'set_share_options',
+      params: {
+        'p_family_id': familyId,
+        'p_drive_done': options.driveDone?.name,
+        'p_weekly_change': options.weeklyChange,
+        'p_habits': options.habits,
+      },
+    );
+  }
+
+  @override
+  Future<List<DriveEvent>> familyDriveEvents() async =>
+      _rows(await client.rpc('get_family_drive_events'))
+          .map(DriveEvent.fromJson)
+          .toList();
+
+  @override
+  Future<List<WeeklyChange>> familyWeekly() async =>
+      _rows(await client.rpc('get_family_weekly'))
+          .map(WeeklyChange.fromJson)
+          .toList();
+
+  @override
+  Future<List<WeeklyHabit>> familyHabits() async =>
+      _rows(await client.rpc('get_family_habits'))
+          .map(WeeklyHabit.fromJson)
+          .toList();
 
   @override
   Future<void> setSharingPaused(bool paused) async {

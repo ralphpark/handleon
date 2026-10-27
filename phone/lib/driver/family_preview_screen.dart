@@ -57,12 +57,17 @@ class _FamilyPreviewScreenState extends State<FamilyPreviewScreen> {
         Notice(error!),
         SecondaryButton('다시 불러오기', onPressed: load),
       ],
+      if (view?.options.driveDone != null)
+        const Muted('운전 마침 소식은 가족 공유 유예 기간과 상관없이 바로 가요'),
       if (view != null)
         FamilyContent(
           driverName: widget.backend.displayName ?? '가족',
           paused: view!.paused,
           feed: view!.feed,
           patterns: view!.patterns,
+          driveEvents: view!.options.driveDone == null ? [] : view!.driveEvents,
+          weekly: view!.options.weeklyChange ? view!.weekly : [],
+          habits: view!.options.habits ? view!.habits : [],
           // 서버가 이 받는 사람에게 허용된 패턴만 반환한다.
           sharePattern: true,
         ),

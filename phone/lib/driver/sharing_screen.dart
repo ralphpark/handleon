@@ -16,6 +16,7 @@ class SharingScreen extends StatefulWidget {
 class _SharingScreenState extends State<SharingScreen> {
   List<Share>? shares;
   SharingState? sharing;
+  Map<String, ShareOptions> options = {};
   int request = 0;
   String? error;
   bool busy = false;
@@ -30,6 +31,7 @@ class _SharingScreenState extends State<SharingScreen> {
     setState(() {
       shares = null;
       sharing = null;
+      options = {};
       error = null;
     });
     try {
@@ -37,10 +39,21 @@ class _SharingScreenState extends State<SharingScreen> {
         widget.backend.myShares(),
         widget.backend.sharingState(),
       ]);
+      final loadedShares = result[0] as List<Share>;
+      // get_sharing_state recipients have names but no family IDs. Read the
+      // authoritative options by get_my_shares ID, never by name or list order.
+      final views = await Future.wait([
+        for (final share in loadedShares)
+          widget.backend.previewFamilyView(share.familyId),
+      ]);
       if (mounted && current == request) {
         setState(() {
-          shares = result[0] as List<Share>;
+          shares = loadedShares;
           sharing = result[1] as SharingState;
+          options = {
+            for (var i = 0; i < loadedShares.length; i++)
+              loadedShares[i].familyId: views[i].options,
+          };
           error = null;
         });
       }
@@ -49,6 +62,119 @@ class _SharingScreenState extends State<SharingScreen> {
         setState(() => error = friendlyError(e));
       }
     }
+  }
+
+  Future<void> chooseDriveDone(Share share, bool enabled) async {
+    DriveDoneMode? mode;
+    if (enabled) {
+      final current = request;
+      setState(() => busy = true);
+      mode = await showDialog<DriveDoneMode>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('운전 마침 소식'),
+          scrollable: true,
+          content: RadioGroup<DriveDoneMode>(
+            groupValue: null,
+            onChanged: (choice) => Navigator.pop(context, choice),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (final choice in DriveDoneMode.values)
+                  RadioListTile<DriveDoneMode>(
+                    value: choice,
+                    title: Text(choice.label),
+                  ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('취소'),
+            ),
+          ],
+        ),
+      );
+      if (!mounted) return;
+      setState(() => busy = false);
+      if (mode == null || current != request) return;
+    }
+    await changeOptions(
+      share,
+      (latest) => ShareOptions(
+        driveDone: mode,
+        weeklyChange: latest.weeklyChange,
+        habits: latest.habits,
+      ),
+    );
+  }
+
+  Future<void> changeOptions(
+    Share share,
+    ShareOptions Function(ShareOptions) update,
+  ) => change(() async {
+    final user = widget.backend.userId;
+    // The car or another phone may have changed consent while this screen was
+    // open. Merge just the explicit choice into the latest recipient options.
+    final latest = await widget.backend.previewFamilyView(share.familyId);
+    if (!mounted || widget.backend.userId != user) return;
+    await widget.backend.setShareOptions(
+      share.familyId,
+      update(latest.options),
+    );
+  });
+
+  Widget optionControls(Share share) {
+    final choice = options[share.familyId]!;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        SwitchListTile(
+          key: Key('driveDone:${share.familyId}'),
+          contentPadding: EdgeInsets.zero,
+          title: const Text('운전 마침 소식'),
+          subtitle: const Muted('가족 공유 유예 기간과 상관없이 바로 가요'),
+          value: choice.driveDone != null,
+          onChanged: busy ? null : (enabled) => chooseDriveDone(share, enabled),
+        ),
+        if (choice.driveDone != null) Muted(choice.driveDone!.label),
+        SwitchListTile(
+          key: Key('weeklyChange:${share.familyId}'),
+          contentPadding: EdgeInsets.zero,
+          title: const Text('최근 몇 주 변화'),
+          subtitle: const Muted('몇 주 사이에 갑자기 달라지면 알려요'),
+          value: choice.weeklyChange,
+          onChanged: busy
+              ? null
+              : (enabled) => changeOptions(
+                  share,
+                  (latest) => ShareOptions(
+                    driveDone: latest.driveDone,
+                    weeklyChange: enabled,
+                    habits: latest.habits,
+                  ),
+                ),
+        ),
+        SwitchListTile(
+          key: Key('habits:${share.familyId}'),
+          contentPadding: EdgeInsets.zero,
+          title: const Text('운전 습관 요약'),
+          subtitle: const Muted('매주 방향지시등·급제동 같은 운전 습관 합계를 보내요'),
+          value: choice.habits,
+          onChanged: busy
+              ? null
+              : (enabled) => changeOptions(
+                  share,
+                  (latest) => ShareOptions(
+                    driveDone: latest.driveDone,
+                    weeklyChange: latest.weeklyChange,
+                    habits: enabled,
+                  ),
+                ),
+        ),
+      ],
+    );
   }
 
   Future<void> edit(Share share) async {
@@ -208,6 +334,7 @@ class _SharingScreenState extends State<SharingScreen> {
                   ),
                 ],
               ),
+              optionControls(share),
             ], 12),
           ),
         ),

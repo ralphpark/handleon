@@ -32,6 +32,12 @@ class FakeBackend implements Backend {
   bool paused = false;
   bool? pausedSet;
   List<PatternRow> patterns = [];
+  List<DriveEvent> driveEvents = [];
+  List<WeeklyChange> weekly = [];
+  List<WeeklyHabit> habits = [];
+  int driveEventsCalls = 0, weeklyCalls = 0, habitsCalls = 0;
+  final options = <String, ShareOptions>{};
+  final optionSaves = <(String, ShareOptions)>[];
   List<FamilyLink> links = [];
   List<SentNote> notes = [];
   final views = <String, FamilyView>{};
@@ -182,6 +188,7 @@ class FakeBackend implements Backend {
             scope: share.scope,
             timing: share.timing,
             sharePattern: share.sharePattern,
+            options: options[share.familyId] ?? const ShareOptions(),
           ),
       ],
     );
@@ -199,7 +206,40 @@ class FakeBackend implements Backend {
     check();
     previewFamilyId = familyId;
     return views[familyId] ??
-        FamilyView(paused: paused, feed: [], patterns: []);
+        FamilyView(
+          paused: paused,
+          feed: [],
+          patterns: [],
+          options: options[familyId] ?? const ShareOptions(),
+        );
+  }
+
+  @override
+  Future<void> setShareOptions(String familyId, ShareOptions choices) async {
+    check();
+    optionSaves.add((familyId, choices));
+    options[familyId] = choices;
+  }
+
+  @override
+  Future<List<DriveEvent>> familyDriveEvents() async {
+    check();
+    driveEventsCalls++;
+    return List.of(driveEvents);
+  }
+
+  @override
+  Future<List<WeeklyChange>> familyWeekly() async {
+    check();
+    weeklyCalls++;
+    return List.of(weekly);
+  }
+
+  @override
+  Future<List<WeeklyHabit>> familyHabits() async {
+    check();
+    habitsCalls++;
+    return List.of(habits);
   }
 
   @override

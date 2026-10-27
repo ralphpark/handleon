@@ -8,6 +8,7 @@ import 'package:phone/share_options.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'support/sharing_fixtures.dart';
+import 'support/new_sharing_fixtures.dart';
 
 // 외부 서버를 호출하지 않고 루프백에서 실제 RPC 요청 이름·본문·응답 파서를 확인한다.
 void main() {
@@ -155,4 +156,38 @@ void main() {
       await expectLater(backend.sendNote('d', '늘 응원해요'), throwsA(expected));
     }
   });
+  test(
+    'new sharing RPCs send all four choices including explicit null',
+    () async {
+      for (final mode in [null, ...DriveDoneMode.values]) {
+        await backend.setShareOptions(
+          'family-id',
+          ShareOptions(driveDone: mode, weeklyChange: true, habits: false),
+        );
+        expectCall('set_share_options', {
+          'p_family_id': 'family-id',
+          'p_drive_done': mode?.name,
+          'p_weekly_change': true,
+          'p_habits': false,
+        });
+      }
+      responses.addAll({
+        'get_family_drive_events': [driveEventJson()],
+        'get_family_weekly': [
+          weeklyJson(),
+          {...weeklyJson(), 'flagged': false, 'domains': [], 'top': []},
+        ],
+        'get_family_habits': [habitJson()],
+      });
+      expect((await backend.familyDriveEvents()).single.minutes, 42);
+      expectCall('get_family_drive_events', {});
+      expect((await backend.familyWeekly()).map((w) => w.flagged), [
+        true,
+        false,
+      ]);
+      expectCall('get_family_weekly', {});
+      expect((await backend.familyHabits()).single.nightTrips, 1);
+      expectCall('get_family_habits', {});
+    },
+  );
 }

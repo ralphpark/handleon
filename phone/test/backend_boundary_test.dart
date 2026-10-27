@@ -6,6 +6,7 @@ import 'package:phone/share_options.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'support/sharing_fixtures.dart';
+import 'support/new_sharing_fixtures.dart';
 
 const optionalPatternKeys = [
   'night_ratio',
@@ -22,6 +23,70 @@ SentNote noteAt(String createdAt) =>
     SentNote.fromJson({...noteJson(), 'created_at': createdAt});
 
 void main() {
+  test('new sharing parsers reject malformed consent and dates', () {
+    for (final value in [null, 1, 'false']) {
+      expect(
+        () => ShareOptions.fromJson({
+          'drive_done': null,
+          'weekly_change': value,
+          'habits': false,
+        }),
+        throwsFormatException,
+      );
+      expect(
+        () => ShareOptions.fromJson({
+          'drive_done': null,
+          'weekly_change': false,
+          'habits': value,
+        }),
+        throwsFormatException,
+      );
+    }
+    for (final date in ['2026-02-30', '2026-10-27', '2026-10-26T00:00:00Z']) {
+      expect(
+        () => weekly(changes: {'week_start': date}),
+        throwsFormatException,
+      );
+    }
+    expect(
+      () => DriveEvent.fromJson({
+        ...driveEventJson(),
+        'ended_at': '2026-10-27T14:30:00',
+      }),
+      throwsFormatException,
+    );
+    expect(
+      () => DriveEvent.fromJson({...driveEventJson(), 'minutes': 1.5}),
+      throwsFormatException,
+    );
+  });
+  test(
+    'habit counters are nonnegative and zero totals never imply success',
+    () {
+      final h = habit(
+        changes: {
+          'signal_total': 0,
+          'signal_kept': 2,
+          'promises_total': 0,
+          'promises_kept': 4,
+        },
+      );
+      expect(h.signalKept, 0);
+      expect(h.promisesKept, 0);
+      for (final key in [
+        'trips',
+        'minutes',
+        'signal_total',
+        'hard_brakes',
+        'hard_accels',
+        'night_trips',
+      ]) {
+        expect(() => habit(changes: {key: -1}), throwsFormatException);
+        expect(() => habit(changes: {key: 0.5}), throwsFormatException);
+      }
+      expect(habit(changes: {'story': null}).story, isNull);
+    },
+  );
   test('PatternRow accepts whole-number doubles in every integer column', () {
     final row = pattern(
       changes: {
