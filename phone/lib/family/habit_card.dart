@@ -5,8 +5,15 @@ import '../ui.dart';
 import 'feed_text.dart';
 
 class HabitCard extends StatelessWidget {
-  const HabitCard({super.key, required this.row});
+  const HabitCard({
+    super.key,
+    required this.row,
+    this.showCoach = false,
+    this.onCoach,
+  });
   final WeeklyHabit row;
+  final bool showCoach;
+  final VoidCallback? onCoach;
 
   @override
   Widget build(BuildContext context) {
@@ -37,6 +44,7 @@ class HabitCard extends StatelessWidget {
                     ),
             ),
           if (story != null) Text(period(story)),
+          if (showCoach) SecondaryButton('어떻게 말을 꺼낼까요?', onPressed: onCoach),
         ], 12),
       ),
     );

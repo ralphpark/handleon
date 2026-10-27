@@ -7,6 +7,7 @@ import '../ui.dart';
 import 'family_content.dart';
 import 'feed_text.dart';
 import 'note_screen.dart';
+import 'coach_sheet.dart';
 
 const feedNotice =
     '새 요약은 운전하시는 분이 정한 시점이 지나면 보여요. 도착하면 "새 운전 요약이 도착했어요" 알림을 보내 드려요.';
@@ -35,6 +36,8 @@ class _FamilyHomeState extends State<FamilyHome> {
   List<WeeklyChange> weekly = [];
   List<WeeklyHabit> habits = [];
   final sectionKeys = <String, Map<FeedSection, GlobalKey>>{};
+  final coachRequests = <String, Future<CoachAdvice>>{};
+  bool coachSheetOpen = false;
   FeedSection? pendingSection;
   bool loading = true;
   String? error;
@@ -132,6 +135,42 @@ class _FamilyHomeState extends State<FamilyHome> {
     if (mounted) await load();
   }
 
+  Future<void> openCoach(String driverId) async {
+    if (coachSheetOpen) return;
+    coachSheetOpen = true;
+    final advice = coachRequests.putIfAbsent(driverId, () {
+      final pending = Future<CoachAdvice>.sync(
+        () => widget.backend.coach(driverId),
+      );
+      // Keep an in-flight request after dismissal or feed refresh, but never
+      // cache finished advice: sharing and the server's context may change.
+      unawaited(
+        pending.then<void>(
+          (_) => coachRequests.remove(driverId),
+          onError: (Object _, StackTrace _) {
+            coachRequests.remove(driverId);
+          },
+        ),
+      );
+      return pending;
+    });
+    try {
+      await showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        useSafeArea: true,
+        showDragHandle: true,
+        clipBehavior: Clip.antiAlias,
+        builder: (_) => FractionallySizedBox(
+          heightFactor: .9,
+          child: CoachSheet(advice: advice),
+        ),
+      );
+    } finally {
+      coachSheetOpen = false;
+    }
+  }
+
   @override
   Widget build(BuildContext context) => PageFrame(
     title: '가족 소식',
@@ -171,6 +210,8 @@ class _FamilyHomeState extends State<FamilyHome> {
               weekly: weekly.where((r) => r.driverId == link.driverId).toList(),
               habits: habits.where((r) => r.driverId == link.driverId).toList(),
               sectionKeys: sectionKeys[link.driverId] ?? const {},
+              showCoach: true,
+              onCoach: openCoach,
             ),
             SecondaryButton(
               '한마디 보내기',

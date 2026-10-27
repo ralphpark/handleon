@@ -7,6 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'support/sharing_fixtures.dart';
 import 'support/new_sharing_fixtures.dart';
+import 'support/coach_fixtures.dart';
 
 const optionalPatternKeys = [
   'night_ratio',
@@ -23,6 +24,79 @@ SentNote noteAt(String createdAt) =>
     SentNote.fromJson({...noteJson(), 'created_at': createdAt});
 
 void main() {
+  test(
+    'coach rejects wrong counts blank non-string and overlong sentences',
+    () {
+      for (final key in ['openers', 'avoid', 'topic']) {
+        final count = key == 'openers' ? 3 : 2;
+        for (final bad in <Object?>[
+          null,
+          1,
+          true,
+          '',
+          ' \n\t',
+          '가' * 81,
+          '😀' * 81,
+        ]) {
+          final json = coachJson();
+          final advice = json['advice'] as Map<String, dynamic>;
+          advice[key] = key == 'topic'
+              ? bad
+              : [bad, ...List.filled(count - 1, '이야기해요')];
+          expect(
+            () => CoachAdvice.fromJson(json),
+            throwsA(isA<Unavailable>()),
+            reason: '$key: $bad',
+          );
+        }
+        if (key != 'topic') {
+          for (final bad in <Object?>[
+            null,
+            {},
+            '문장',
+            List.filled(count - 1, '이야기해요'),
+            List.filled(count + 1, '이야기해요'),
+          ]) {
+            final json = coachJson();
+            (json['advice'] as Map<String, dynamic>)[key] = bad;
+            expect(
+              () => CoachAdvice.fromJson(json),
+              throwsA(isA<Unavailable>()),
+            );
+          }
+        }
+      }
+    },
+  );
+  test(
+    'coach accepts exactly 80 Unicode code points and requires a known source',
+    () {
+      final sentence = '😀' * 80;
+      final result = CoachAdvice.fromJson({
+        'advice': {
+          'openers': [sentence, sentence, sentence],
+          'avoid': [sentence, sentence],
+          'topic': sentence,
+        },
+        'source': 'ai',
+      });
+      expect(result.topic, sentence);
+      for (final source in [null, '', 'AI', 'cached', 1]) {
+        expect(
+          () => CoachAdvice.fromJson({...coachJson(), 'source': source}),
+          throwsA(isA<Unavailable>()),
+        );
+      }
+      for (final body in <Object?>[
+        null,
+        [],
+        {},
+        {'advice': null, 'source': 'ai'},
+      ]) {
+        expect(() => CoachAdvice.fromJson(body), throwsA(isA<Unavailable>()));
+      }
+    },
+  );
   test('new sharing parsers reject malformed consent and dates', () {
     for (final value in [null, 1, 'false']) {
       expect(

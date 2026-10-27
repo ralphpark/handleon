@@ -5,8 +5,15 @@ import '../ui.dart';
 import 'feed_text.dart';
 
 class DriveEventCard extends StatelessWidget {
-  const DriveEventCard({super.key, required this.events});
+  const DriveEventCard({
+    super.key,
+    required this.events,
+    this.showCoach = false,
+    this.onCoach,
+  });
   final List<DriveEvent> events;
+  final bool showCoach;
+  final VoidCallback? onCoach;
 
   @override
   Widget build(BuildContext context) {
@@ -28,6 +35,7 @@ class DriveEventCard extends StatelessWidget {
                 : heading.replaceFirst('오늘', '${day.month}월 ${day.day}일'),
           ),
           for (final event in events) Text(driveEventLine(event)),
+          if (showCoach) SecondaryButton('어떻게 말을 꺼낼까요?', onPressed: onCoach),
         ], 12),
       ),
     );

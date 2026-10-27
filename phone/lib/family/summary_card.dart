@@ -31,8 +31,15 @@ const domainColors = {
 String monthLabel(DateTime date) => '${date.year}년 ${date.month}월';
 
 class SummaryCard extends StatelessWidget {
-  const SummaryCard({super.key, required this.row});
+  const SummaryCard({
+    super.key,
+    required this.row,
+    this.showCoach = false,
+    this.onCoach,
+  });
   final MonthRow row;
+  final bool showCoach;
+  final VoidCallback? onCoach;
   @override
   Widget build(BuildContext context) {
     final family = row is FeedRow ? row as FeedRow : null;
@@ -117,6 +124,8 @@ class SummaryCard extends StatelessWidget {
                 const Divider(height: 1),
                 Muted('${family.driverName} 님이 정한 범위: ${family.scope.label}'),
               ],
+              if (showCoach && family != null)
+                SecondaryButton('어떻게 말을 꺼낼까요?', onPressed: onCoach),
             ], 16),
           ),
         ),

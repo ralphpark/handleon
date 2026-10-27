@@ -102,7 +102,9 @@ void main() {
                 matching: find.byType(Text),
               ),
             )
-            .map((t) => t.data!),
+            .map((t) => t.data!)
+            // The family-only action is intentionally absent in preview.
+            .where((text) => text != '어떻게 말을 꺼낼까요?'),
     ];
     final expected = copy();
     expect(expected, isNotEmpty);

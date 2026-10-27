@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:phone/backend.dart';
 import 'package:phone/share_options.dart';
 
+import 'coach_fixtures.dart';
+
 class FakeBackend implements Backend {
   FakeBackend({this.role, this.userId, this.displayName = '내 이름'});
   @override
@@ -52,6 +54,19 @@ class FakeBackend implements Backend {
   );
   int patternsCalls = 0, linksCalls = 0;
   final tokens = <(String, String)>[];
+  CoachAdvice? coachResult;
+  Object? coachError;
+  Completer<CoachAdvice>? pendingCoach;
+  final coachCalls = <String>[];
+
+  @override
+  Future<CoachAdvice> coach(String driverId) async {
+    coachCalls.add(driverId);
+    check();
+    if (coachError != null) throw coachError!;
+    return pendingCoach?.future ?? coachResult ?? coachAdvice();
+  }
+
   void check() {
     if (error != null) throw error!;
   }

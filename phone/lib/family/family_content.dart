@@ -40,6 +40,8 @@ class FamilyContent extends StatelessWidget {
     this.weekly = const [],
     this.habits = const [],
     this.sectionKeys = const {},
+    this.showCoach = false,
+    this.onCoach,
   });
   final String driverName;
   final bool paused, sharePattern;
@@ -49,6 +51,11 @@ class FamilyContent extends StatelessWidget {
   final List<WeeklyChange> weekly;
   final List<WeeklyHabit> habits;
   final Map<FeedSection, Key> sectionKeys;
+  final bool showCoach;
+  final ValueChanged<String>? onCoach;
+
+  VoidCallback? coachFor(String driverId) =>
+      onCoach == null ? null : () => onCoach!(driverId);
 
   @override
   Widget build(BuildContext context) {
@@ -90,21 +97,36 @@ class FamilyContent extends StatelessWidget {
           Column(
             key: sectionKeys[FeedSection.weekly],
             children: spaced([
-              for (final row in changes) WeeklyCard(row: row),
+              for (final row in changes)
+                WeeklyCard(
+                  row: row,
+                  showCoach: showCoach,
+                  onCoach: coachFor(row.driverId),
+                ),
             ], 16),
           ),
         if (days.isNotEmpty)
           Column(
             key: sectionKeys[FeedSection.drive],
             children: spaced([
-              for (final events in days.values) DriveEventCard(events: events),
+              for (final events in days.values)
+                DriveEventCard(
+                  events: events,
+                  showCoach: showCoach,
+                  onCoach: coachFor(events.first.driverId),
+                ),
             ], 16),
           ),
         if (habitRows.isNotEmpty)
           Column(
             key: sectionKeys[FeedSection.habits],
             children: spaced([
-              for (final row in habitRows) HabitCard(row: row),
+              for (final row in habitRows)
+                HabitCard(
+                  row: row,
+                  showCoach: showCoach,
+                  onCoach: coachFor(row.driverId),
+                ),
             ], 16),
           ),
         // 기존 피드처럼 운전자별 최신 요약 하나를 보여 준다.
@@ -112,6 +134,8 @@ class FamilyContent extends StatelessWidget {
           SummaryCard(
             key: sectionKeys[FeedSection.stage],
             row: summaries.first,
+            showCoach: showCoach,
+            onCoach: coachFor(summaries.first.driverId),
           ),
         for (final row in months.take(2)) PatternCard(row: row),
       ], 16),

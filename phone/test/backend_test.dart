@@ -6,8 +6,24 @@ import 'package:phone/share_options.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'support/new_sharing_fixtures.dart';
+import 'support/coach_fixtures.dart';
 
 void main() {
+  test('coach 429 maps to DailyLimit', () {
+    expect(
+      CoachError.fromError(
+        const FunctionException(status: 429, details: {'error': 'daily_limit'}),
+      ),
+      isA<DailyLimit>(),
+    );
+  });
+  test('coach fallback flag survives parse', () {
+    final advice = CoachAdvice.fromJson(coachJson(source: 'fallback'));
+    expect(advice.fromFallback, true);
+    expect(advice.openers, hasLength(3));
+    expect(advice.avoid, hasLength(2));
+    expect(CoachAdvice.fromJson(coachJson()).fromFallback, false);
+  });
   test('share options parse null drive_done as off', () {
     final options = ShareOptions.fromJson({
       'drive_done': null,

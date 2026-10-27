@@ -54,6 +54,7 @@ abstract class Backend {
   Future<List<DriveEvent>> familyDriveEvents();
   Future<List<WeeklyChange>> familyWeekly();
   Future<List<WeeklyHabit>> familyHabits();
+  Future<CoachAdvice> coach(String driverId);
   Future<List<PatternRow>> familyPatterns();
   Future<List<FamilyLink>> familyLinks();
   Future<int> sendNote(String driverId, String body);
@@ -431,6 +432,75 @@ class WeeklyHabit {
       story: j['story'] == null ? null : _string(j['story']),
     );
   }
+}
+
+class CoachAdvice {
+  const CoachAdvice({
+    required this.openers,
+    required this.avoid,
+    required this.topic,
+    required this.fromFallback,
+  });
+  final List<String> openers, avoid;
+  final String topic;
+  final bool fromFallback;
+
+  factory CoachAdvice.fromJson(Object? value) {
+    String sentence(Object? raw) {
+      if (raw is! String || raw.trim().isEmpty || raw.runes.length > 80) {
+        throw const Unavailable();
+      }
+      return raw;
+    }
+
+    List<String> sentences(Object? raw, int count) {
+      if (raw is! List || raw.length != count) throw const Unavailable();
+      return List.unmodifiable(raw.map(sentence));
+    }
+
+    if (value is! Map<String, dynamic> ||
+        (value['source'] != 'ai' && value['source'] != 'fallback')) {
+      throw const Unavailable();
+    }
+    final advice = value['advice'];
+    if (advice is! Map<String, dynamic>) throw const Unavailable();
+    return CoachAdvice(
+      openers: sentences(advice['openers'], 3),
+      avoid: sentences(advice['avoid'], 2),
+      topic: sentence(advice['topic']),
+      fromFallback: value['source'] == 'fallback',
+    );
+  }
+}
+
+sealed class CoachError implements Exception {
+  const CoachError();
+
+  static CoachError fromError(Object error) {
+    if (error is CoachError) return error;
+    if (error is FunctionException && error.details is Map) {
+      final code = (error.details as Map)['error'];
+      if (error.status == 429 && code == 'daily_limit') {
+        return const DailyLimit();
+      }
+      if (error.status == 404 && code == 'share_not_found') {
+        return const ShareNotFound();
+      }
+    }
+    return const Unavailable();
+  }
+}
+
+final class DailyLimit extends CoachError {
+  const DailyLimit();
+}
+
+final class ShareNotFound extends CoachError {
+  const ShareNotFound();
+}
+
+final class Unavailable extends CoachError {
+  const Unavailable();
 }
 
 class SentNote {
@@ -836,6 +906,20 @@ class SupabaseBackend implements Backend {
       _rows(await client.rpc('get_family_habits'))
           .map(WeeklyHabit.fromJson)
           .toList();
+
+  @override
+  Future<CoachAdvice> coach(String driverId) async {
+    try {
+      final response = await client.functions.invoke(
+        'conversation-coach',
+        body: {'driver_id': driverId},
+      );
+      if (response.status != 200) throw const Unavailable();
+      return CoachAdvice.fromJson(response.data);
+    } catch (error) {
+      throw CoachError.fromError(error);
+    }
+  }
 
   @override
   Future<void> setSharingPaused(bool paused) async {
