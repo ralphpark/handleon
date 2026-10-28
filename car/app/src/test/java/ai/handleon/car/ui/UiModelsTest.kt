@@ -36,6 +36,22 @@ class UiModelsTest {
         assertEquals(days.takeLast(14), ui.days)
         assertEquals(20.0, ui.days.last().index)
     }
+    @Test fun okConditionExplainsOnlyADayOverTheLine() {
+        val top = listOf(Contribution(FeatureId.O2, 1.2, 1.2), Contribution(FeatureId.O7, 0.8, 0.8))
+        fun ui(status: ConditionStatus, over: Boolean) = ConditionUi.from(ConditionReport(status,
+            listOf(DayResult(LocalDate.of(2026, 10, 28), 1.0, 1.0, 2.0, alert = status == ConditionStatus.CAUTION, over = over)), top))
+        ui(ConditionStatus.OK, over = false).let {
+            assertEquals("오늘 운전 컨디션 괜찮아요", it.title)
+            assertTrue(it.reasons.isEmpty())
+            assertEquals("평소 범위 안에서 운전하셨어요.", it.note)
+        }
+        ui(ConditionStatus.OK, over = true).let {
+            assertEquals(2, it.reasons.size)
+            assertEquals("오늘 하루만 평소와 조금 달랐어요. 이틀 이어지면 알려 드려요.", it.note)
+        }
+        ui(ConditionStatus.CAUTION, over = true).let { assertEquals(2, it.reasons.size); assertNull(it.note) }
+        assertEquals("나만의 기준이 쌓이면 평소와 견주어 알려 드릴게요.", ConditionUi.from(null).note)
+    }
     @Test fun age59ChoosesConditionAnd60ChoosesMaeum() {
         val today = LocalDate.of(2026, 10, 23)
         assertEquals(Mode.CONDITION, modeForBirthYear(1967, today))

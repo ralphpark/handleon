@@ -35,6 +35,13 @@ class HolidayModelTest {
         assertTrue(kotlin.math.abs(HolidayModel.predict(global, chuseok.minusWeeks(1))) < 0.15)
     }
 
+    @Test fun `holiday effect ignores the intercept and month terms`() {
+        val w = zero.also { it[0] = 0.5; it[2] = -0.4; it[3] = 0.25; for (m in 4 until HolidayModel.SIZE) it[m] = 0.3 }
+        assertEquals(0.0, HolidayModel.holidayEffect(w, LocalDate.of(2026, 10, 19)))
+        assertEquals(-0.4, HolidayModel.holidayEffect(w, LocalDate.of(2026, 9, 21)), 1e-12)
+        assertTrue(kotlin.math.abs(HolidayModel.predict(w, LocalDate.of(2026, 10, 19))) >= 0.2)
+    }
+
     @Test fun `weekly counts are normalized by each drivers median`() {
         val weeks = counts(8).mapIndexed { i, pair -> pair.first to if (i == 4) 6.0 else 10.0 }
         val a = HolidayModel.localDelta(zero, weeks)

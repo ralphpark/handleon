@@ -28,7 +28,8 @@ fun fedEffect(raw: String?): ((LocalDate) -> Double)? {
     val model = parseFedModel(raw) ?: return null
     if (model.round == 0 || model.weights.all { it == 0.0 }) return null
     val weights = model.weights.toDoubleArray()
-    return { day -> HolidayModel.predict(weights, day).takeIf(Double::isFinite) ?: 0.0 }
+    // Only learned holiday terms may hold a week; an intercept alone would hold every ordinary week.
+    return { day -> HolidayModel.holidayEffect(weights, day).takeIf(Double::isFinite) ?: 0.0 }
 }
 
 private fun monday(day: LocalDate) = day.minusDays(day.dayOfWeek.value - 1L)

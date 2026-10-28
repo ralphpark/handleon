@@ -27,7 +27,8 @@ import kotlin.test.assertNull
 
 class EngineRunnerTest {
     @Test fun `learned global model affects weekly reports refresh and Gleo consistently`() = runTest {
-        val first = LocalDate.of(2026, 4, 6)
+        // 10/3 (Sat) puts the 9/28 week in the model's holiday term while the Mon-Fri rule leaves it in.
+        val first = LocalDate.of(2026, 9, 28)
         val now = first.plusWeeks(4).atTime(9, 0).atZone(KST)
         val template = load("father").first()
         val trips = (0L..3L).flatMap { week -> (0L..2L).map { day ->
@@ -37,15 +38,18 @@ class EngineRunnerTest {
         val store = MemoryStore(trips)
         val runner = runner(store, now.toString())
         val plain = runner.run(Mode.MAEUM)
-        val model = """{"round":1,"weights":[-0.3,0,0,0,0,0,0,0,0,0,0,0,0,0,0]}"""
+        val model = """{"round":1,"weights":[0.5,0,0,-0.3,0,0,0,0,0,0,0,0,0,0,0]}"""
         store.saveReport("FED_MODEL", model)
         val learned = runner.run(Mode.MAEUM)
-        kotlin.test.assertTrue(learned.weekly!!.weeks.all { it.excluded })
+        fun excluded(r: ai.handleon.driveprint.WeeklyReport?, week: LocalDate) = r!!.weeks.single { it.weekStart == week }.excluded
+        kotlin.test.assertFalse(excluded(plain.weekly, first))
+        kotlin.test.assertTrue(excluded(learned.weekly, first))
+        kotlin.test.assertFalse(excluded(learned.weekly, first.plusWeeks(2)), "an intercept alone must not hold an ordinary week")
         kotlin.test.assertNotEquals(plain.weekly, learned.weekly)
         assertEquals(plain.long, learned.long)
         assertEquals(learned.weekly, runner.refreshWeekly(now.toLocalDate()))
         val gleo = ai.handleon.car.gleo.buildGleoContext(trips, emptySet(), emptySet(), emptySet(), now, false, model)
-        assertEquals(learned.weekly.status, gleo.weekly)
+        assertEquals(learned.weekly!!.status, gleo.weekly)
     }
 
     @Test fun `missing invalid and round zero models preserve the current engine result`() = runTest {

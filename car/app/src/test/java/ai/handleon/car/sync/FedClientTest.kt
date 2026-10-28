@@ -1,7 +1,10 @@
 package ai.handleon.car.sync
 
 import ai.handleon.car.store.DriverStatus
+import ai.handleon.driveprint.Driveprint
 import ai.handleon.driveprint.HolidayModel
+import ai.handleon.driveprint.TripFeatures
+import ai.handleon.driveprint.WeeklyTrack
 import ai.handleon.driveprint.Source
 import java.io.File
 import java.time.LocalDate
@@ -165,7 +168,21 @@ class FedClientTest {
     @Test fun `round zero and invalid global models never produce an effect`() {
         for (raw in listOf(null, "{}", model(), model(0, List(15) { 0.2 }), model(-1), model(2, List(14) { 0.0 }),
             """{"round":1,"weights":["NaN"]}""")) assertNull(fedEffect(raw))
-        assertEquals(-0.3, fedEffect(model(1, List(15) { if (it == 0) -0.3 else 0.0 }))!!(LocalDate.of(2026, 10, 19)))
+        assertEquals(-0.3, fedEffect(model(1, List(15) { if (it == 2) -0.3 else 0.0 }))!!(LocalDate.of(2026, 9, 21)))
+    }
+    @Test fun `an intercept-only global model never holds an ordinary week`() {
+        // The shared server once held round 2 = [0.5, 0, -0.025, 0...] from integration tests.
+        val effect = fedEffect(model(2, List(15) { when (it) { 0 -> 0.5; 2 -> -0.025; else -> 0.0 } }))!!
+        assertEquals(0.0, effect(LocalDate.of(2026, 10, 19)))
+        val week = LocalDate.of(2026, 10, 19)
+        val trips = (0L..3L).map { week.plusDays(it) }.map { day ->
+            val start = day.atTime(9, 0).atZone(java.time.ZoneId.of("Asia/Seoul")).toInstant().toEpochMilli()
+            TripFeatures(start, start + 1_800_000, Source.CAR, 15.0, false, false, false, null, null, false, false, 0.0,
+                0, 0, 0, 0, 0, null, 0, null, null, 0, 0)
+        }
+        val report = Driveprint().weeklyReport(trips, emptySet(), emptySet(), LocalDate.of(2026, 10, 28), effect = effect)
+        assertEquals(false, report.weeks.single().excluded)
+        assertEquals(WeeklyTrack.MIN_BASE - 1, report.weeksUntilReady)
     }
     @Test fun `round change is not retried against a new model in the same attempt`() = runTest {
         repo.saved += countTrips(); presentation = true

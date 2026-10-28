@@ -39,7 +39,7 @@ fun FedSettingsPanel(ui: FedUi, presentation: Boolean, connected: Boolean, busy:
         fedSettingsLines(ui, presentation).forEach { Text(it, style = MaterialTheme.typography.bodySmall, color = DarkTokens.inkMuted) }
         if (!connected) Text("휴대폰을 연결한 뒤 선택할 수 있어요", color = DarkTokens.inkMuted)
         if (ui.busy) Text("숫자 모델을 확인하고 있어요", color = DarkTokens.inkMuted)
-        if (presentation) {
+        if (presentation) Row(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             PillButton("한 라운드 보내기 · 모의", onRound, kind = PillKind.SECONDARY, enabled = connected && ui.enabled && !ui.busy && !busy)
             PillButton("전역 모델 새로 받기", onRefresh, kind = PillKind.SECONDARY, enabled = connected && !ui.busy && !busy)
         }

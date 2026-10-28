@@ -92,7 +92,7 @@ data class MaeumUi(
 
 data class ConditionUi(
     val status: ConditionStatus, val title: String, val days: List<DayResult>,
-    val reasons: List<ReasonUi>, val collectedDays: Int, val period: String,
+    val reasons: List<ReasonUi>, val collectedDays: Int, val period: String, val note: String? = null,
 ) {
     companion object {
         fun from(report: ConditionReport?, labels: Set<LocalDate> = emptySet(),
@@ -108,8 +108,18 @@ data class ConditionUi(
                 (reset == null || day.day >= reset) && (gapStart == null || day.day >= gapStart) &&
                 day.day !in labels && !day.alert && !day.over }.coerceAtMost(7)
             val status = report?.status ?: ConditionStatus.BUILDING
-            return ConditionUi(status, Copy.conditionTitle(status), days.takeLast(14), ReasonUi.from(report?.top.orEmpty()),
-                count, last?.let { "${it.monthValue}월 ${it.dayOfMonth}일 · 마지막 운전 기록" } ?: "운전 지문 적립 중")
+            // An OK day under the line has nothing to explain; listing tiny worsenings under "괜찮아요" reads as a contradiction.
+            val overToday = days.lastOrNull()?.over == true
+            val reasons = if (status == ConditionStatus.CAUTION || (status == ConditionStatus.OK && overToday))
+                ReasonUi.from(report?.top.orEmpty()) else emptyList()
+            val note = when (status) {
+                ConditionStatus.BUILDING -> "나만의 기준이 쌓이면 평소와 견주어 알려 드릴게요."
+                ConditionStatus.OK -> if (overToday) "오늘 하루만 평소와 조금 달랐어요. 이틀 이어지면 알려 드려요."
+                    else "평소 범위 안에서 운전하셨어요."
+                else -> null
+            }
+            return ConditionUi(status, Copy.conditionTitle(status), days.takeLast(14), reasons,
+                count, last?.let { "${it.monthValue}월 ${it.dayOfMonth}일 · 마지막 운전 기록" } ?: "운전 지문 적립 중", note)
         }
     }
 }

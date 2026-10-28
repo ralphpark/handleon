@@ -28,6 +28,13 @@ object HolidayModel {
         return dot(w, features(weekStart))
     }
 
+    /** Holiday terms only. The intercept and month terms describe ordinary weeks, so they must never hold one. */
+    fun holidayEffect(w: DoubleArray, weekStart: LocalDate): Double {
+        validateWeights(w)
+        val x = features(weekStart)
+        return (1..3).sumOf { w[it] * x[it] }
+    }
+
     /** [weeks] contains raw counts, not pre-normalized targets. An empty delta means no training. */
     fun localDelta(global: DoubleArray, weeks: List<Pair<LocalDate, Double>>,
                    lr: Double = 0.05, epochs: Int = 20, clip: Double = 1.0): DoubleArray {

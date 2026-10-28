@@ -29,8 +29,7 @@ private fun CompactConditionContent(ui: ConditionUi, onLabels: () -> Unit) {
     Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
         GlassPanel(Modifier.weight(1f), padding = 20.dp) {
             ConditionTitle(ui, false, compact = true)
-            if (ui.reasons.isEmpty()) Text("나만의 기준이 쌓이면 평소와 견주어 알려 드릴게요.",
-                style = MaterialTheme.typography.bodySmall, color = DarkTokens.inkMuted)
+            ui.note?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = DarkTokens.inkMuted) }
             ui.reasons.forEach {
                 Text(it.line, style = MaterialTheme.typography.bodySmall, color = DarkTokens.ink)
                 Text(it.evidence, style = MaterialTheme.typography.bodySmall, color = DarkTokens.inkMuted)
@@ -78,8 +77,8 @@ private fun ConditionTitle(ui: ConditionUi, wide: Boolean, compact: Boolean = fa
 
 @Composable
 private fun ConditionReasons(ui: ConditionUi) {
+    ui.note?.let { Text(it, style = MaterialTheme.typography.bodyLarge, color = DarkTokens.inkMuted) }
     ui.reasons.forEach { ReasonRow(it) }
-    if (ui.reasons.isEmpty()) Text("나만의 기준이 쌓이면 평소와 견주어 알려 드릴게요.", style = MaterialTheme.typography.bodyLarge, color = DarkTokens.inkMuted)
 }
 
 @Composable
