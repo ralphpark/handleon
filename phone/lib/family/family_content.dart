@@ -66,8 +66,12 @@ class FamilyContent extends StatelessWidget {
         : <PatternRow>[];
     final changes = weekly.where((w) => w.flagged).toList()
       ..sort((a, b) => b.weekStart.compareTo(a.weekStart));
-    final habitRows = habits.toList()
-      ..sort((a, b) => b.weekStart.compareTo(a.weekStart));
+    // 지난 주 습관 카드가 쌓이면 월 요약이 맨 아래로 밀려서, 운전자마다 가장 최근 주만 보인다.
+    final latestHabit = <String>{};
+    final habitRows =
+        (habits.toList()..sort((a, b) => b.weekStart.compareTo(a.weekStart)))
+            .where((h) => latestHabit.add(h.driverId))
+            .toList();
     final now = DateTime.now();
     final cutoff = now.subtract(const Duration(days: 14));
     final events =

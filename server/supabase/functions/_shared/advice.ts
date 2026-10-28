@@ -143,11 +143,14 @@ export function buildCoachPrompt(context: unknown): { system: string; user: stri
     user: JSON.stringify(value),
   };
 }
+// Without this the model guessed at codes ("신호를 지킨 비율") and talk months drew judge rejections.
+const CLINIC_GLOSSARY =
+  "자료 뜻: stage building=기록을 모으는 중, stable=평소와 비슷, watch=평소와 조금 다른 점이 있음, talk=가족과 이야기 나눠 보면 좋은 때. domains는 mobility=이동, wayfinding=길 찾기, operation=차 다루기이고 값은 본인 평소 범위 경계 대비 비율로 1 이상이면 평소 범위를 벗어났다는 뜻이며 점수가 아니므로 숫자를 쓰지 않습니다. feature M1=차로 외출하는 횟수, M2=운전하는 날, M3=가까운 동네를 벗어나 다녀오는 일, M4=해가 진 뒤 운전 비중, M5=가는 곳의 가짓수, M6=자주 가는 곳의 다양함, M7=집에서 다녀오는 거리, W2=좌회전 비중, W3=자주 가던 곳으로 가는 길에서 길을 다시 찾는 일, W4=익숙한 곳에 갈 때 내비를 켜는 일, O1=제한속도보다 빠르게 달린 시간, O2=속도를 갑자기 줄인 일, O7=곧은 길에서 핸들 흔들림, O8=내비 회전에서 방향지시등을 켜지 않은 일, O9=차로를 지키도록 차가 도와준 일이며 direction up=늘었음, down=줄었음입니다. 기호(M1 등)는 글에 쓰지 않습니다. weekly.flagged=그 주에 평소와 다른 점이 표시됨. habits는 주별 운전 횟수(trips), 운전 분(minutes), 내비 회전에서 방향지시등을 켠 횟수/전체(signal_kept/signal_total), 급제동(hard_brakes), 급출발(hard_accels), 편안했던 운전(calm_trips), 오래 쉬지 않고 달린 일(long_stretches), 밤 운전(night_trips), 스스로 정한 약속을 지킨 횟수/전체(promises_kept/promises_total)입니다.";
 export function buildClinicPrompt(context: unknown): { system: string; user: string } {
   const r = object(context);
   return {
     system:
-      `${PRINCIPLES}\n운전자 본인의 상담 자료입니다. summary는 600자 이하 한 단락, questions는 의사·상담사에게 물어볼 질문 3개(각 80자 이하)입니다. 면책 문구는 앱이 붙이므로 넣지 않습니다. {"summary":"...","questions":[...]} 형식만 반환합니다.`,
+      `${PRINCIPLES}\n${CLINIC_GLOSSARY}\n운전자 본인의 상담 자료입니다. summary는 600자 이하 한 단락으로 달라진 점과 그대로인 점을 기록 사실로만 적습니다. 달라진 까닭(병, 노화, 기억력 등)을 짐작하거나 검사를 권하지 않고, talk 단계도 걱정을 키우지 않는 담담한 말로 씁니다. questions는 의사·상담사에게 이런 변화를 어떻게 보면 좋을지 묻는 열린 질문 3개(각 80자 이하)입니다. 면책 문구는 앱이 붙이므로 넣지 않습니다. {"summary":"...","questions":[...]} 형식만 반환합니다.`,
     user: JSON.stringify({
       monthly: rows(r.monthly).map(monthly),
       habits: rows(r.habits).map(habits),

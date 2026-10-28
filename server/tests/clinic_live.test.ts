@@ -90,3 +90,87 @@ integrationTest("live driver clinic returns a safe one-page summary", async () =
   assertEquals(value.questions.length, 3);
   assert([value.summary, ...value.questions].every(ruleSafe));
 });
+// 2026-10-28: the "아버지" replay (talk month, eight habit weeks) always fell back.
+integrationTest("live clinic writes an AI summary for a talk month", async () => {
+  const driver = await newUser("driver");
+  ok(
+    await admin.from("monthly_summaries").upsert(row(driver.id, {
+      stage: "talk",
+      domains: { mobility: 1.132, operation: -0.022, wayfinding: 1.612 },
+      top: [
+        {
+          feature: "M3",
+          grade: "A",
+          text: "가까운 동네를 벗어나 다녀오시는 일이 평소보다 줄었어요",
+        },
+        { feature: "M1", grade: "A", text: "차로 외출하시는 횟수가 평소보다 줄었어요" },
+        { feature: "M7", grade: "A", text: "집에서 다녀오시는 거리가 평소보다 가까워졌어요" },
+      ],
+    })),
+  );
+  const habits: [string, number, number, number, number, number, number][] = [
+    ["2026-09-07", 10, 216, 7, 9, 5, 5],
+    ["2026-09-14", 9, 157, 8, 11, 3, 6],
+    ["2026-09-21", 6, 358, 3, 5, 7, 3],
+    ["2026-09-28", 4, 55, 4, 4, 0, 4],
+    ["2026-10-05", 10, 190, 8, 11, 4, 6],
+    ["2026-10-12", 6, 88, 5, 8, 0, 6],
+    ["2026-10-19", 9, 191, 9, 11, 2, 7],
+    ["2026-10-26", 6, 135, 4, 6, 5, 1],
+  ];
+  for (
+    const [week_start, trips, minutes, signal_kept, signal_total, hard_brakes, calm_trips] of habits
+  ) {
+    ok(
+      await admin.from("weekly_habits").insert({
+        driver_id: driver.id,
+        week_start,
+        trips,
+        minutes,
+        signal_kept,
+        signal_total,
+        hard_brakes,
+        hard_accels: 0,
+        calm_trips,
+        long_stretches: 0,
+        night_trips: 0,
+        promises_kept: 0,
+        promises_total: 0,
+        story: "",
+        source: "car",
+      }),
+    );
+  }
+  for (
+    const [week_start, top] of [
+      ["2026-09-28", []],
+      ["2026-10-12", []],
+      ["2026-10-19", [{ feature: "M4", direction: "down" }, { feature: "M3", direction: "down" }, {
+        feature: "W4",
+        direction: "up",
+      }]],
+      ["2026-10-26", [{ feature: "M1", direction: "down" }, { feature: "M7", direction: "down" }]],
+    ] as const
+  ) {
+    ok(
+      await admin.from("weekly_changes").insert({
+        driver_id: driver.id,
+        week_start,
+        flagged: false,
+        domains: [],
+        top,
+        source: "car",
+      }),
+    );
+  }
+  const sources: string[] = [];
+  for (let i = 0; i < 3; i++) {
+    const started = Date.now();
+    const value = ok(await driver.client.functions.invoke("clinic-summary", { body: {} }));
+    sources.push(value.source);
+    console.log(`try ${i + 1}: ${value.source} ${Date.now() - started}ms`);
+    if (value.source === "ai") console.log(JSON.stringify(value, null, 1));
+    assert([value.summary, ...value.questions].every(ruleSafe));
+  }
+  assertEquals(sources, ["ai", "ai", "ai"]);
+});

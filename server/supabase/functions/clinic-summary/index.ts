@@ -64,7 +64,13 @@ function productionDeps(): ClinicDeps {
     load: (driver) => loadClinicContext(db, driver),
     generate: (context) =>
       opusText(buildClinicPrompt(context), { apiKey, signal: controller.signal }),
-    judge: haikuJudge(apiKey, { signal: controller.signal }),
+    judge: haikuJudge(apiKey, {
+      signal: controller.signal,
+      purpose:
+        "이 글은 운전자 본인이 의사·상담사에게 가져갈 요약과 질문입니다. 운전 횟수·급제동 횟수 같은 기록 사실과 변화의 뜻을 전문가에게 묻는 질문은 진단이나 점수가 아닙니다. 병명이나 결론을 붙이는 말은 허용하지 않습니다.",
+    }),
+    // One generation plus judge takes ~15 s, so a retry needs more than the shared 20 s; the phone waits 45 s.
+    timeoutMs: 40_000,
     onTimeout: () => controller.abort(),
   };
 }

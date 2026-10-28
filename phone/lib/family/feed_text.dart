@@ -91,10 +91,8 @@ String? habitStory(String? story) {
     '방향지시등을 모두 켰어요',
     '운전 약속을 모두 지켰어요',
   };
-  return allowed.contains(story) ||
-          RegExp(r'^이번 주 [0-9]{1,3}번 운전했어요$').hasMatch(story)
-      ? story
-      : null;
+  // 차가 보내는 "이번 주 N번 운전했어요"는 habitLine 과 같은 정보라서 보이지 않는다.
+  return allowed.contains(story) ? story : null;
 }
 
 String feedDate(DateTime date) => '${date.year}년 ${date.month}월 ${date.day}일';

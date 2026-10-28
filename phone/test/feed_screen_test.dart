@@ -42,6 +42,23 @@ void main() {
       expect(b.habitsCalls, 1);
     },
   );
+  testWidgets('only the latest habit week per driver sits above the summary', (
+    t,
+  ) async {
+    final b = newFeed()
+      ..links = [familyLink(), familyLink(id: 'd2', name: '어머니')]
+      ..habits = [
+        for (final week in ['2026-10-12', '2026-10-26', '2026-10-19'])
+          habit(changes: {'week_start': week}),
+        habit(changes: {'driver_id': 'd2', 'driver_name': '어머니'}),
+      ];
+    await showScreen(t, FamilyHome(backend: b));
+    expect(find.byType(HabitCard), findsNWidgets(2));
+    Finder inHabit(String text) =>
+        find.descendant(of: find.byType(HabitCard), matching: find.text(text));
+    expect(inHabit('2026년 10월 26일부터 한 주'), findsNWidgets(2));
+    expect(inHabit('2026년 10월 19일부터 한 주'), findsNothing);
+  });
   testWidgets(
     'drive cards group by local date and driver including single outings',
     (t) async {

@@ -103,7 +103,8 @@ void main() {
     expect(safeFamilyName('아버지'), '아버지');
   });
   test('habit story only shows server location-free templates', () {
-    expect(habitStory('이번 주 12번 운전했어요'), '이번 주 12번 운전했어요');
+    // habitLine already says how many drives, so the car's fallback count is not repeated.
+    expect(habitStory('이번 주 12번 운전했어요'), isNull);
     expect(habitStory('운전 약속을 모두 지켰어요'), '운전 약속을 모두 지켰어요');
     expect(habitStory('서울역에 다녀왔어요'), isNull);
     expect(habitStory(''), isNull);
