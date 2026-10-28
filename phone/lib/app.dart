@@ -133,6 +133,7 @@ class _AppRouterState extends State<AppRouter> {
     scaffoldMessengerKey: messenger,
     navigatorKey: navigator,
     title: '핸들온',
+    debugShowCheckedModeBanner: false,
     theme: lightTheme,
     darkTheme: darkTheme,
     themeMode: ThemeMode.dark,

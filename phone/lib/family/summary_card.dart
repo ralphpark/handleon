@@ -116,7 +116,7 @@ class SummaryCard extends StatelessWidget {
               if (showDomains && row.domains != null) ...[
                 const SectionTitle('영역별 변화'),
                 DomainBars(domains: row.domains!),
-                const Muted('점선은 건강하셨던 기준 기간의 나와 견준 평소 범위예요.'),
+                const Muted('점선은 기준 기간의 나와 견준 평소 범위예요.'),
               ],
               if (family != null && row.stage == 'talk')
                 const Text('운전 이야기로 가볍게 말을 꺼내 보세요. 요즘 어디를 다니시는지 여쭤보는 것부터 좋아요.'),

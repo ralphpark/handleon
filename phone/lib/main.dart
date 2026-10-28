@@ -69,6 +69,7 @@ class _BackendStartupState extends State<BackendStartup> {
     if (backend != null) return AppRouter(backend: backend!);
     return MaterialApp(
       title: '핸들온',
+      debugShowCheckedModeBanner: false,
       theme: lightTheme,
       darkTheme: darkTheme,
       themeMode: ThemeMode.dark,
@@ -91,6 +92,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) => MaterialApp(
     title: '핸들온',
+    debugShowCheckedModeBanner: false,
     theme: lightTheme,
     darkTheme: darkTheme,
     themeMode: ThemeMode.dark,
