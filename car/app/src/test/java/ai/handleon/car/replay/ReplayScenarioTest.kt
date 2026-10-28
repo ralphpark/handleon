@@ -5,6 +5,7 @@ import ai.handleon.driveprint.*
 import java.io.File
 import java.time.LocalDate
 import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.test.currentTime
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -42,6 +43,18 @@ class ReplayScenarioTest {
         assertTrue(first.today <= drop.plusWeeks(3))
         assertEquals(WeeklyStatus.FLAGGED, first.weekly.status)
         assertTrue(first.weekly.weeks.last().over.isNotEmpty())
+    }
+    @Test fun `weekly change lines stay on screen long enough to read`() = runTest {
+        for (persona in listOf(ReplayPersona.SUDDEN, ReplayPersona.FATHER)) {
+            val timed = mutableListOf<Pair<Long, ReplayFrame>>()
+            ReplayController(load(persona).trips, Driveprint()).frames(persona).collect { timed += currentTime to it }
+            val flagged = timed.indices.filter { timed[it].second.weekly.status == WeeklyStatus.FLAGGED }
+            if (persona == ReplayPersona.SUDDEN) assertEquals(3, flagged.size)
+            flagged.filter { it + 1 < timed.size }.forEach { i ->
+                assertTrue(timed[i + 1].first - timed[i].first >= persona.stepMs + ReplayController.WEEKLY_HOLD_MS)
+            }
+            println("REPLAY ${persona.id} flagged=${flagged.size} total=${currentTime}ms")
+        }
     }
     @Test fun `father scenario keeps 24 monthly frames and the final talk scene`() = runTest {
         val frames = ReplayController(load(ReplayPersona.FATHER).trips, Driveprint()).frames(ReplayPersona.FATHER).toList()

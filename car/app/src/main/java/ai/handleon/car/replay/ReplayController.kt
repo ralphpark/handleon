@@ -66,6 +66,8 @@ class ReplayController(trips: List<TripFeatures>, private val engine: Driveprint
                     if (persona == ReplayPersona.NEW_CAR) Adapt.weekly(selected, zone).takeLast(12) else emptyList())
             }
             emit(frame)
+            // A weekly change line is the point of the scene; at one second per week it was gone before anyone could read it.
+            if (frame.weekly.status == WeeklyStatus.FLAGGED) delay(WEEKLY_HOLD_MS)
         }
     }
 
@@ -88,4 +90,6 @@ class ReplayController(trips: List<TripFeatures>, private val engine: Driveprint
             emit(engine.conditionReport(selected, emptySet(), emptySet(), day))
         }
     }
+
+    companion object { const val WEEKLY_HOLD_MS = 3_000L }
 }
